@@ -540,7 +540,7 @@ class MarginalizedPhaseGaussianNoise(GaussianNoise):
                 # cutoff, then the loglr is just 0 for this detector
                 hh_i = 0.
                 hd_i = 0j
-            else:                                 
+            else:
                 # whiten the waveform
                 h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                 # calculate inner products
@@ -613,7 +613,7 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
 
     .. math::
 
-	log L(k\Delta t) = -1/2<d|d> - 1/2 <h|h> + Re(d|h)
+        log L(k\Delta t) = -1/2<d|d> - 1/2 <h|h> + Re(d|h)
 
     and so the likelihood marginalised over time is simply
 
@@ -625,7 +625,7 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
 
     .. math::
 
-	\log{L} = \log\left(\int_{0}^{T} np.exp(\np.log(L))\right)
+        \log{L} = \log\left(\int_{0}^{T} np.exp(\np.log(L))\right)
 
     This class computes the above expression for the log likelihood.
     """
@@ -664,12 +664,12 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
                 # whiten the waveform
                 h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                 hd_i = 4. * 1/(delta_t*len(time_array)) * numpy.fft.fft(
-                self.data[det][self._kmin:kmax] * h[self._kmin:kmax]).real
+                       self.data[det][self._kmin:kmax] * \
+                       h[self._kmin:kmax]).real
                 hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
             hd += hd_i
             hh += hh_i
         hd = abs(hd)
-        #store
         setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh)
         setattr(self._current_stats, '{}_matchedfilter_snrsq'.format(set), hd)
 
@@ -771,4 +771,4 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
 
         for dist in dist_array:
             likelihood += delta_d * (hd/dist - 0.5*hh/dist**2)
-         return numpy.log(likelihood)
+        return numpy.log(likelihood)
