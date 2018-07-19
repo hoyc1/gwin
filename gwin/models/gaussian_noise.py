@@ -639,7 +639,7 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
 
     def _loglr(self):
         r"""Computes the log likelihood ratio,
-	"""
+        """
         params = self.current_params
         try:
             wfs = self._waveform_generator.generate(**params)
@@ -664,7 +664,7 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
                 # whiten the waveform
                 h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                 hd_i = 4. * 1/(delta_t*len(time_array)) * numpy.fft.fft(
-                       self.data[det][self._kmin:kmax] * \
+                       self.data[det][self._kmin:kmax] *
                        h[self._kmin:kmax]).real
                 hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
             hd += hd_i
@@ -765,7 +765,6 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
             hh += hh_i
             hd += hd_i
         hd = abs(hd)
-        #store
         setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh)
         setattr(self._current_stats, '{}_matchedfilter_snrsq'.format(det), hd)
 
