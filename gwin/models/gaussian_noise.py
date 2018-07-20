@@ -764,7 +764,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
 
     def default_stats(self):
         """The stats that ``get_current_stats`` returns by default."""
-        if self._margtime == True:
+        if self._margtime:
             return ['logjacobian', 'logprior', 'loglr'] + \
                    ['{}_optimal_snrsq'.format(det) for det in self._data]
         else:
@@ -823,31 +823,24 @@ class MarginalizedGaussianNoise(GaussianNoise):
                            h[self._kmin:kmax])
                 opt_snr += hh_i
                 mf_snr += hd_i
-        if self._margtime:
-            if self._margdist:
-                if self._margphi:
-                    for dist in dist_array:
-                        logl += delta_d * numpy.log(special.i0e(mf_snr/dist)) +
-                                mf_snr/dist - 0.5*opt_snr/dist**2
-                    return logl
-                else:
-                    for dist in dist_array:
-                        logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
-                    return logl
-            elif self._margphi:
-                return numpy.log(special.i0e(mf_snr)) + mf_snr - 0.5*opt_snr
-            else:
-                return special.logsumexp(mf_snr - 0.5*opt_snr)
+        if self._margtime and self._margdist and self._margphi:
+            for dist in dist_array:
+                logl += delta_d * (numpy.log(special.i0e(mf_snr/dist)) +
+                                   mf_snr/dist - 0.5*opt_snr/dist**2)
+            return logl
+        elif self._margtime and self._margdist:
+            for dist in dist_array:
+                logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
+            return logl
+        elif self._magtime:
+            return special.logsumexp(mf_snr - 0.5*opt_snr)
         else:
-            if self._margdist:
-                if self._margphi:
-                    for dist in dist_array:
-                        logl += delta_d * (numpy.log(special.i0e(mf_snr/dist)) +
-                                mf_snr/dist - 0.5*opt_snr/dist**2)
-                    return logl
-                else:
-                    for dist in dist_array:
-                        logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
-                    return logl
-            else:
-                return numpy.log(special.i0e(mf_snr)) + mf_snr - 0.5*opt_snr
+            if self._margdist and self.margphi:
+                for dist in dist_array:
+                    logl += delta_d * (numpy.log(special.i0e(mf_snr/dist)) +
+                                       mf_snr/dist - 0.5*opt_snr/dist**2)
+                return logl
+            elif self.margdist:
+                for dist in dist_array:
+                    logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
+            return numpy.log(special.i0e(mf_snr)) + mf_snr - 0.5*opt_snr
