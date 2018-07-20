@@ -758,10 +758,17 @@ class MarginalizedGaussianNoise(GaussianNoise):
     r"""
     """
 
-    def __init__(self, **kwargs):
-        self._margtime = kwargs.get('time_marginalization', False)
-        self._margdist = kwargs.get('distance_marginalization', False)
-        self._margphi = kwargs.get('phase_marginalization', False)
+    def __init__(self, variable_params, data, waveform_generator,
+                 f_lower, psds=None, f_upper=None, norm=None,
+                 time_marginalization=False, distance_marginalization=False,
+                 phase_marginalization=False, **kwargs):
+        self._margtime = time_marginalization
+        self._margdist = distance_marginalization
+        self._margphi = phase_marginalization
+        super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
+                                                        waveform_generator,
+                                                        f_lower, psds, f_upper,
+                                                        norm, **kwargs)
 
     def default_stats(self):
         """The stats that ``get_current_stats`` returns by default."""
@@ -783,7 +790,11 @@ class MarginalizedGaussianNoise(GaussianNoise):
             return self._nowaveform_loglr()
         opt_snr = 0.
         mf_snr = 0j
-        logl = 0.
+        if self._margdist:
+            self._priormin = 50.
+            self._priormax = 5000.
+            dist_array = numpy.linspace(self._priormin, self._priormax, 10**4)
+            delta_d = dist_array[1] - dist_array[0]
         if self._margtime:
             for det, h in wfs.items():
                 # the kmax of the waveforms may be different than internal kmax
@@ -818,6 +829,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
                            h[self._kmin:kmax])
                 opt_snr += hh_i
                 mf_snr += hd_i
+        mf_snr = abs(mf_snr)
         if self._margtime and self._margdist and self._margphi:
             mf_snr_marg = mf_snr/dist_array
             opt_snr_marg = opt_snr/dist_array**2
@@ -828,16 +840,16 @@ class MarginalizedGaussianNoise(GaussianNoise):
             mf_snr_marg = mf_snr/dist_array
             opt_snr_marg = opt_snr/dist_array**2
             return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg, b=delta_d)
-        elif self._magtime:
+        elif self._margtime:
             return special.logsumexp(mf_snr - 0.5*opt_snr)
         else:
-            if self._margdist and self.margphi:
+            if self._margdist and self._margphi:
                 mf_snr_marg = mf_snr/dist_array
                 opt_snr_marg = opt_snr/dist_array**2
                 return special.logsumexp(numpy.log(special.i0e(mf_snr_marg)) +
                                          mf_snr_marg - 0.5*opt_snr_marg,
                                          b=delta_d)
-            elif self.margdist:
+            elif self._margdist:
                 mf_snr_marg = mf_snr/dist_array
                 opt_snr_marg = opt_snr/dist_array**2
                 return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg,
