@@ -424,7 +424,7 @@ class GaussianNoise(BaseDataModel):
 class MarginalizedGaussianNoise(GaussianNoise):
     r"""The likelihood is analytically marginalized over phase and/or time
     and/or distance.
-    
+
     For the case of marginalizing over phase, the signal, can be written as:
 
     .. math::
@@ -437,7 +437,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
     for details), the posterior is:
 
     .. math::
-                                                                                
+
         p(\Theta,\phi|d)
             &\propto p(\Theta)p(\phi)p(d|\Theta,\phi) \\
             &\propto p(\Theta)\frac{1}{2\pi}\exp\left[
@@ -609,7 +609,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
     distance_marginalization : {False, boolean}
         A Boolean operator which determines if the likelihood is marginalized
         over distance
-    **kwargs :                                                                  
+    **kwargs :
         All other keyword arguments are passed to ``GaussianNoise``.
     """
 
@@ -652,7 +652,9 @@ class MarginalizedGaussianNoise(GaussianNoise):
             dist_array = numpy.linspace(self._priormin, self._priormax, 10**4)
             delta_d = dist_array[1] - dist_array[0]
         if self._margtime:
+            mf_snr_fft = 0.
             for det, h in wfs.items():
+                delta_t = h.delta_t
                 # the kmax of the waveforms may be different than internal kmax
                 kmax = min(len(h), self._kmax)
                 if self._kmin >= kmax:
@@ -663,11 +665,14 @@ class MarginalizedGaussianNoise(GaussianNoise):
                     hd_i = 0j
                 else:
                     hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
-                    hd_i = 4. * 1/(delta_t*len(time_array)) * numpy.fft.ifft(
-                           self.data[det][self._kmin:kmax] *
-                           h[self._kmin:kmax]).real
+                    hd_i = self.data[det][self._kmin:kmax].inner(
+                           h[self._kmin:kmax])
+                    hd_i_fft = 4. * 1/(h.delta_f) * numpy.fft.ifft(
+                               self.data[det][self._kmin:kmax] *
+                               h[self._kmin:kmax]).real
                 opt_snr += hh_i
                 mf_snr += hd_i
+                mf_snr_fft += hd_i_fft
         else:
             for det, h in wfs.items():
                 # the kmax of the waveforms may be different than internal kmax
@@ -687,17 +692,22 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 mf_snr += hd_i
         mf_snr = abs(mf_snr)
         if self._margtime and self._margdist and self._margphi:
+            logl = delta_t * numpy.sum(special.i0e(mf_snr_fft))
+            logl_marg = logl/dist_array
             mf_snr_marg = mf_snr/dist_array
             opt_snr_marg = opt_snr/dist_array**2
-            return special.logsumexp(numpy.log(special.i0e(mf_snr_marg)) +
-                                     mf_snr_marg - 0.5*opt_snr_marg,
-                                     b=delta_d)
+            return special.logsumexp(logl_marg + mf_snr_marg-0.5*opt_snr_marg,
+                                     b = delta_d)
         elif self._margtime and self._margdist:
-            mf_snr_marg = mf_snr/dist_array
+            logl = delta_t * numpy.sum(mf_snr_fft)
             opt_snr_marg = opt_snr/dist_array**2
-            return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg, b=delta_d)
+            return special.logsumexp(logl - 0.5*opt_snr_marg,
+                                     b=delta_d*delta_t)
+        elif self._margtime and self._margphi:
+            logl = special.logsumexp(special.i0e(mf_snr_fft), b=delta_t)
+            return logl - 0.5*opt_snr
         elif self._margtime:
-            return special.logsumexp(mf_snr - 0.5*opt_snr)
+            return special.logsumexp(mf_snr_fft, b=delta_t) - 0.5*opt_snr
         else:
             if self._margdist and self._margphi:
                 mf_snr_marg = mf_snr/dist_array
