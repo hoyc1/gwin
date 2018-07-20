@@ -752,13 +752,16 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
             likelihood += delta_d * (hd/dist - 0.5*hh/dist**2)
         return numpy.log(likelihood)
 
+
 class MarginalizedGaussianNoise(GaussianNoise):
     r"""
     """
+
     def __init__(self, **kwargs):
         self._margtime = kwargs.get('time_marginalization', False)
         self._margdist = kwargs.get('distance_marginalization', False)
-        self._margphi  = kwargs.get('phase_marginalization', False)
+        self._margphi = kwargs.get('phase_marginalization', False)
+
     def default_stats(self):
         """The stats that ``get_current_stats`` returns by default."""
         if self._margtime == True:
@@ -768,6 +771,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
             return ['logjacobian', 'logprior', 'loglr'] + \
                    ['{}_optimal_snrsq'.format(det) for det in self._data] + \
                    ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
+
     def _loglr(self):
         r"""Computes the log likelihood ratio,
         """
@@ -783,24 +787,23 @@ class MarginalizedGaussianNoise(GaussianNoise):
             # assume a flat prior between 50 and 5000
             self._mindist = 50.
             self._maxdist = 5000.
-            dist_array = numpy.linspace(self._mindist, self._maxdist,
-                         10**4)
+            dist_array = numpy.linspace(self._mindist, self._maxdist, 10**4)
             delta_d = dist_array[1] - dist_array[0]
         if self._margtime == True:
             for det, h in wfs.items():
                 # the kmax of the waveforms may be different than internal kmax
                 kmax = min(len(h), self._kmax)
                 if self._kmin >= kmax:
-                   # if the waveform terminates before the filtering low
-                   # frequency cutoff, then the loglr is just 0 for this
-                   # detector
-                   hh_i = 0.
-                   hd_i = 0j
+                    # if the waveform terminates before the filtering low
+                    # frequency cutoff, then the loglr is just 0 for this
+                    # detector
+                    hh_i = 0.
+                    hd_i = 0j
                 else:
-                   hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
-                   hd_i = 4. * 1/(delta_t*len(time_array)) * numpy.fft.ifft(
-                          self.data[det][self._kmin:kmax] *
-                          h[self._kmin:kmax]).real
+                    hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
+                    hd_i = 4. * 1/(delta_t*len(time_array)) * numpy.fft.ifft(
+                           self.data[det][self._kmin:kmax] *
+                           h[self._kmin:kmax]).real
                 opt_snr += hh_i
                 mf_snr += hd_i
         else:
@@ -808,11 +811,11 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 # the kmax of the waveforms may be different than internal kmax
                 kmax = min(len(h), self._kmax)
                 if self._kmin >= kmax:
-                   # if the waveform terminates before the filtering low
-                   # frequency cutoff, then the loglr is just 0 for this
-                   # detector
-                   hh_i = 0.
-                   hd_i = 0j
+                    # if the waveform terminates before the filtering low
+                    # frequency cutoff, then the loglr is just 0 for this
+                    # detector
+                    hh_i = 0.
+                    hd_i = 0j
                 else:
                     h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                     hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
