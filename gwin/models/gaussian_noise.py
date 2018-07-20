@@ -783,13 +783,13 @@ class MarginalizedGaussianNoise(GaussianNoise):
         opt_snr = 0.
         mf_snr = 0j
         logl = 0.
-        if self_margdist == True:
+        if self_margdist:
             # assume a flat prior between 50 and 5000
             self._mindist = 50.
             self._maxdist = 5000.
             dist_array = numpy.linspace(self._mindist, self._maxdist, 10**4)
             delta_d = dist_array[1] - dist_array[0]
-        if self._margtime == True:
+        if self._margtime:
             for det, h in wfs.items():
                 # the kmax of the waveforms may be different than internal kmax
                 kmax = min(len(h), self._kmax)
@@ -823,9 +823,9 @@ class MarginalizedGaussianNoise(GaussianNoise):
                            h[self._kmin:kmax])
                 opt_snr += hh_i
                 mf_snr += hd_i
-        if self._margtime == True:
-            if self._margdist == True:
-                if self._margphi == True:
+        if self._margtime:
+            if self._margdist:
+                if self._margphi:
                     for dist in dist_array:
                         logl += delta_d * numpy.log(special.i0e(mf_snr/dist)) +
                                 mf_snr/dist - 0.5*opt_snr/dist**2
@@ -834,13 +834,13 @@ class MarginalizedGaussianNoise(GaussianNoise):
                     for dist in dist_array:
                         logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
                     return logl
-            elif self._margphi == True:
+            elif self._margphi:
                 return numpy.log(special.i0e(mf_snr)) + mf_snr - 0.5*opt_snr
             else:
                 return special.logsumexp(mf_snr - 0.5*opt_snr)
         else:
-            if self._margdist == True:
-                if self._margphi == True:
+            if self._margdist:
+                if self._margphi:
                     for dist in dist_array:
                         logl += delta_d * (numpy.log(special.i0e(mf_snr/dist)) +
                                 mf_snr/dist - 0.5*opt_snr/dist**2)
