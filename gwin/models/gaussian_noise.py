@@ -421,10 +421,11 @@ class GaussianNoise(BaseDataModel):
             return getattr(self._current_stats, '{}_optimal_snrsq'.format(det))
 
 
-class MarginalizedPhaseGaussianNoise(GaussianNoise):
-    r"""The likelihood is analytically marginalized over phase.
-
-    This class can be used with signal models that can be written as:
+class MarginalizedGaussianNoise(GaussianNoise):
+    r"""The likelihood is analytically marginalized over phase and/or time
+    and/or distance.
+    
+    For the case of marginalizing over phase, the signal, can be written as:
 
     .. math::
 
@@ -436,7 +437,7 @@ class MarginalizedPhaseGaussianNoise(GaussianNoise):
     for details), the posterior is:
 
     .. math::
-
+                                                                                
         p(\Theta,\phi|d)
             &\propto p(\Theta)p(\phi)p(d|\Theta,\phi) \\
             &\propto p(\Theta)\frac{1}{2\pi}\exp\left[
@@ -500,176 +501,7 @@ class MarginalizedPhaseGaussianNoise(GaussianNoise):
             \frac{1}{2}\sum_i\left[ \left<h^0_i, h^0_i\right> -
                                     \left<d_i, d_i\right> \right]
 
-    This class computes the above expression for the log likelihood.
-    """
-    name = 'marginalized_phase'
-
-    @property
-    def default_stats(self):
-        """The stats that ``get_current_stats`` returns by default."""
-        return ['logjacobian', 'logprior', 'loglr'] + \
-               ['{}_optimal_snrsq'.format(det) for det in self._data]
-
-    def _loglr(self):
-        r"""Computes the log likelihood ratio,
-
-        .. math::
-
-            \log \mathcal{L}(\Theta) =
-                I_0 \left(\left|\sum_i O(h^0_i, d_i)\right|\right) -
-                \frac{1}{2}\left<h^0_i, h^0_i\right>,
-
-        at the current point in parameter space :math:`\Theta`.
-
-        Returns
-        -------
-        float
-            The value of the log likelihood ratio evaluated at the given point.
-        """
-        params = self.current_params
-        try:
-            wfs = self._waveform_generator.generate(**params)
-        except NoWaveformError:
-            return self._nowaveform_loglr()
-        hh = 0.
-        hd = 0j
-        for det, h in wfs.items():
-            # the kmax of the waveforms may be different than internal kmax
-            kmax = min(len(h), self._kmax)
-            if self._kmin >= kmax:
-                # if the waveform terminates before the filtering low frequency
-                # cutoff, then the loglr is just 0 for this detector
-                hh_i = 0.
-                hd_i = 0j
-            else:
-                # whiten the waveform
-                h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
-                # calculate inner products
-                hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
-                hd_i = self.data[det][self._kmin:kmax].inner(
-                    h[self._kmin:kmax])
-            # store
-            setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh_i)
-            # TODO: is it possible to store a something like cplx_loglr for
-            # each detector?
-            hh += hh_i
-            hd += hd_i
-        hd = abs(hd)
-        return numpy.log(special.i0e(hd)) + hd - 0.5*hh
-
-
-class MarginalizedTimeGaussianNoise(GaussianNoise):
-    r"""The likelihood is analytically marginalized over time.
-
-    This class can be used with signal models that can be written as:
-
-    .. math::
-
-        \tilde{h}_{j} = \tilde{h}_{j}^{0} \exp\left(-2\pi ij\Delta ft\right)
-
-    The time can be analytically marginalized over with a uniform prior as
-    follows:
-    assuming the noise is stationary and Gaussian (see `GaussianNoise`
-    for details), the likelihood is:
-
-    .. math::
-
-        log L = -\frac{1}{2}\left<d-h|d-h\right>
-
-    We note that <h|h> and <d|d> are time independent while <d|h> is dependent
-    on time
-
-    .. math::
-
-        \left<d|h\right>(t) = 4\Delta f\sum_{j=0}^{N/2} \frac{\tilde{d}_{j}^{*}
-                              \tilde{h}_{j}^{0}}{S_{j}} \exp\left(-2\pi ij
-                              \Delta f t\right)
-
-    For integer timesteps t=k\Delta t
-
-    .. math::
-
-        \left<d|h\right>(k\Delta t) = 4\Delta f\sum_{j=0}^{N/2} \frac{
-                                      \tilde{d}_{j}^{*}\tilde{h}_{j}^{0}}
-                                      {S_{j}}\exp(-2\pi \frac{ijk}{N}
-
-        \left<d|h\right>(k\Delta t) = 2\Delta f\sum_{j=0}^{N} \frac{
-                                      \tilde{d}_{j}^{*}\tilde{h}_{j}^{0}}
-                                      {S_{j}} \exp(-2\pi \frac{ijk}{N}
-
-    Using a FFT, this expression can be evaluated efficiently for all k
-
-    .. math::
-
-        \left<d|h\right>(k\Delta t) = 2\Delta f FFT_{k} (\frac{dh}{S})
-
-    Meaning that the likelihood for each integer timestep is
-
-    .. math::
-
-        log L(k\Delta t) = -1/2<d|d> - 1/2 <h|h> + Re(d|h)
-
-    and so the likelihood marginalised over time is simply
-
-    .. math::
-
-        \log{L} = \log\left(\int_{0}^{T} np.exp(\np.log(L) p(t))\right)
-
-    where p(t) is the prior. If we assume a flat prior then,
-
-    .. math::
-
-        \log{L} = \log\left(\int_{0}^{T} np.exp(\np.log(L))\right)
-
-    This class computes the above expression for the log likelihood.
-    """
-    name = 'marginalized_time'
-
-    @property
-    def default_stats(self):
-        """The stats that ``get_current_stats`` returns by default."""
-        return ['logjacobian', 'logprior', 'loglr'] + \
-               ['{}_optimal_snrsq'.format(det) for det in self._data] + \
-               ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
-
-    def _loglr(self):
-        r"""Computes the log likelihood ratio,
-        """
-        params = self.current_params
-        try:
-            wfs = self._waveform_generator.generate(**params)
-        except NoWaveformError:
-            return self._nowaveform_loglr()
-        hh = 0.
-        hd = 0.
-        for det, h in wfs.items():
-            # the kmax of the waveforms may be different than internal kmax
-            kmax = min(len(h), self._kmax)
-            if self._kmin >= kmax:
-                # if the waveform terminates before the filtering low frequency
-                # cutoff, then the loglr is just 0 for this detector
-                hh_i = 0.
-                hd_i = 0j
-            else:
-                h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
-                hd_i = 4. * 1/(delta_t*len(time_array)) * numpy.fft.fft(
-                       self.data[det][self._kmin:kmax] *
-                       h[self._kmin:kmax]).real
-                hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
-            hd += hd_i
-            hh += hh_i
-        hd = abs(hd)
-        setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh)
-        setattr(self._current_stats, '{}_matchedfilter_snrsq'.format(set), hd)
-
-        return special.logsumexp(hd - 0.5*hh)
-
-
-class MarginalizedDistanceGaussianNoise(GaussianNoise):
-    r"""The likelihood is analytically marginalized over distance.
-
-    The amplitude of the gravitational wave signal is inversely proportional
-    to the distance of the source,
+    For the case of marginalizing over distance, the signal can be written as,
 
     .. math::
 
@@ -684,8 +516,9 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
 
         log L = -\frac{1}{2}\left<d-h|d-h\right>
 
-    We see that <h|h> is inversely proportional to distance squared and <h|d>
-    is inversely proportional to distance. The log likelihood is therefore
+    We see that :math: `<h|h>` is inversely proportional to distance squared
+    and :math: `<h|d>` is inversely proportional to distance. The log
+    likelihood is therefore
 
     .. math::
 
@@ -704,58 +537,80 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
 
         \log L = \log\left(\int_{0}^{D}{\exp{\log L} dD}\right)
 
-    This class computes the above expression for the log likelihood.
-    """
-    name = 'marginalized_distance'
+    For the case of marginalizing over time, the signal can be written as,
 
-    @property
-    def default_stats(self):
-        """The stats that ``get_current_stats`` returns by default."""
-        return ['logjacobian', 'logprior', 'loglr'] + \
-               ['{}_optimal_snrsq'.format(det) for det in self._data] + \
-               ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
+    .. math::
 
-    def _loglr(self):
-        r"""Computes the log likelihood ratio,
-        """
-        params = self.current_params
-        try:
-            wfs = self._waveform_generator.generate(**params)
-        except NoWaveformError:
-            return self._nowaveform_loglr()
-        hh = 0.
-        hd = 0.
-        likelihood = 0.
-        prior_min, prior_max = 50, 5000
-        dist_array = numpy.arange(prior_min, prior_max, 1)
-        delta_d = dist_array[1]-dist_array[0]
-        for det, h in wfs.items():
-            # the kmax of the waveforms may be different than internal kmax
-            kmax = min(len(h), self._kmax)
-            if self._kmin >= kmax:
-                # if the waveform terminates before the filtering low
-                # frequency cutoff, then the loglr is just 0 for this
-                # detector
-                hh_i = 0.
-                hd_i = 0j
-            else:
-                h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
-                hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
-                hd_i = self.data[det][self._kmin:kmax].inner(
-                       h[self._kmin:kmax])
-            hh += hh_i
-            hd += hd_i
-        hd = abs(hd)
-        setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh)
-        setattr(self._current_stats, '{}_matchedfilter_snrsq'.format(det), hd)
+        \tilde{h}_{j} = \tilde{h}_{j}^{0} \exp\left(-2\pi ij\Delta ft\right)
 
-        for dist in dist_array:
-            likelihood += delta_d * (hd/dist - 0.5*hh/dist**2)
-        return numpy.log(likelihood)
+    The time can be analytically marginalized over with a uniform prior as
+    follows:
+    assuming the noise is stationary and Gaussian (see `GaussianNoise`
+    for details), the likelihood is:
 
+    .. math::
 
-class MarginalizedGaussianNoise(GaussianNoise):
-    r"""
+        log L = -\frac{1}{2}\left<d-h|d-h\right>
+
+    We note that :math: `<h|h>` and :math: `<d|d>` are time independent while
+    :math: `<d|h>` is dependent of time
+
+    .. math::
+
+        \left<d|h\right>(t) = 4\Delta f\sum_{j=0}^{N/2} \frac{\tilde{d}_{j}^{*}
+                              \tilde{h}_{j}^{0}}{S_{j}} \exp\left(-2\pi ij
+                              \Delta f t\right)
+
+    For integer timesteps :math: `t=k\Delta t`
+
+    .. math::
+
+        \left<d|h\right>(k\Delta t) = 4\Delta f\sum_{j=0}^{N/2} \frac{
+                                      \tilde{d}_{j}^{*}\tilde{h}_{j}^{0}}
+                                      {S_{j}}\exp(-2\pi \frac{ijk}{N}
+
+        \left<d|h\right>(k\Delta t) = 2\Delta f\sum_{j=0}^{N} \frac{
+                                      \tilde{d}_{j}^{*}\tilde{h}_{j}^{0}}
+                                      {S_{j}} \exp(-2\pi \frac{ijk}{N}
+
+    Using a FFT, this expression can be evaluated efficiently for all :math:
+    `k`
+
+    .. math::
+
+        \left<d|h\right>(k\Delta t) = 2\Delta f FFT_{k} (\frac{dh}{S})
+
+    Meaning that the likelihood for each integer timestep is,
+
+    .. math::
+
+        log L(k\Delta t) = -1/2<d|d> - 1/2 <h|h> + Re(d|h)
+
+    and so the likelihood marginalised over time is simply
+
+    .. math::
+
+        \log{L} = \log\left(\int_{0}^{T} np.exp(\np.log(L) p(t))\right)
+
+    where p(t) is the prior. If we assume a flat prior then,
+
+    .. math::
+
+        \log{L} = \log\left(\int_{0}^{T} np.exp(\np.log(L))\right)
+
+    Parameters
+    ----------
+    time_marginalization : {False, boolean}
+        A Boolean operator which determines if the likelihood is marginalized
+        over time
+    phase_marginalization : {False, boolean}
+        A Boolean operator which determines if the likelihood is marginalized
+        over phase
+    distance_marginalization : {False, boolean}
+        A Boolean operator which determines if the likelihood is marginalized
+        over distance
+    **kwargs :                                                                  
+        All other keyword arguments are passed to ``GaussianNoise``.
     """
 
     def __init__(self, variable_params, data, waveform_generator,
@@ -770,6 +625,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
                                                         f_lower, psds, f_upper,
                                                         norm, **kwargs)
 
+    @property
     def default_stats(self):
         """The stats that ``get_current_stats`` returns by default."""
         if self._margtime:
