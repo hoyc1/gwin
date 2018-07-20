@@ -18,6 +18,7 @@
 
 import numpy
 from scipy import special
+from scipy import interpolate
 
 from pycbc import filter
 from pycbc.waveform import NoWaveformError
@@ -772,6 +773,28 @@ class MarginalizedGaussianNoise(GaussianNoise):
                    ['{}_optimal_snrsq'.format(det) for det in self._data] + \
                    ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
 
+    def _lookuptable(self, optimal_snr, matchedfilter_snr):
+        r"""Calculates the marginalised likelihood for a range of optimal snrs
+        (<h|h>) and matched filter snrs (<h|d>). The marginalised likelihood
+        for a given optimal snr and matched filter snr is then calculated by
+        interpolation
+        """
+        # Assume a flat distribution from 50Mpc - 5000Mpc
+        self._mindist = 50.
+        self._maxdist = 5000.
+        dist_array = numpy.linspace(self._mindist, self._maxdist, 10**4)
+        delta_d = dist_array[1] - dist_array[0]
+        likelihood = np.zeros()
+        opt_snr = numpy.linspace()
+        mf_snr = numpy.linspace()
+        for ii, opt_snr_ref in enumerate():
+            for jj, mf_snr_ref in enumerate():
+                hh = mf_snr_ref/dist_array
+                hd = opt_snr_ref/dist_array**2
+                likelihood[ii][jj] = special.logsumexp(hh - 0.5*dd, b=delta_d)
+        func = interpolate.interp2d(opt_snr, mf_snr, likelihood)
+        return func(optimal_snr, matchedfilter_snr)
+
     def _loglr(self):
         r"""Computes the log likelihood ratio,
         """
@@ -783,12 +806,6 @@ class MarginalizedGaussianNoise(GaussianNoise):
         opt_snr = 0.
         mf_snr = 0j
         logl = 0.
-        if self_margdist:
-            # assume a flat prior between 50 and 5000
-            self._mindist = 50.
-            self._maxdist = 5000.
-            dist_array = numpy.linspace(self._mindist, self._maxdist, 10**4)
-            delta_d = dist_array[1] - dist_array[0]
         if self._margtime:
             for det, h in wfs.items():
                 # the kmax of the waveforms may be different than internal kmax
@@ -824,23 +841,27 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 opt_snr += hh_i
                 mf_snr += hd_i
         if self._margtime and self._margdist and self._margphi:
-            for dist in dist_array:
-                logl += delta_d * (numpy.log(special.i0e(mf_snr/dist)) +
-                                   mf_snr/dist - 0.5*opt_snr/dist**2)
-            return logl
+            mf_snr_marg = mf_snr/dist_array
+            opt_snr_marg = opt_snr/dist_array**2
+            return special.logsumexp(numpy.log(special.i0e(mf_snr_marg)) +
+                                     mf_snr_marg - 0.5*opt_snr_marg,
+                                     b=delta_d)
         elif self._margtime and self._margdist:
-            for dist in dist_array:
-                logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
-            return logl
+            mf_snr_marg = mf_snr/dist_array
+            opt_snr_marg = opt_snr/dist_array**2
+            return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg, b=delta_d)
         elif self._magtime:
             return special.logsumexp(mf_snr - 0.5*opt_snr)
         else:
             if self._margdist and self.margphi:
-                for dist in dist_array:
-                    logl += delta_d * (numpy.log(special.i0e(mf_snr/dist)) +
-                                       mf_snr/dist - 0.5*opt_snr/dist**2)
-                return logl
+                mf_snr_marg = mf_snr/dist_array
+                opt_snr_marg = opt_snr/dist_array**2
+                return special.logsumexp(numpy.log(special.i0e(mf_snr_marg)) +
+                                         mf_snr_marg - 0.5*opt_snr_marg,
+                                         b=delta_d)
             elif self.margdist:
-                for dist in dist_array:
-                    logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
+                mf_snr_marg = mf_snr/dist_array
+                opt_snr_marg = opt_snr/dist_array**2
+                return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg,
+                                         b=delta_d)
             return numpy.log(special.i0e(mf_snr)) + mf_snr - 0.5*opt_snr
