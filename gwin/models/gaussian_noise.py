@@ -575,15 +575,8 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
 
         log L = -\frac{1}{2}\left<d-h|d-h\right>
 
-    where <|> is the inner product between two waveforms and is defined as
-
-    .. math::
-
-        \left<a|b\right> = 4\Delta f \sum_{i=0}^{N/2} \frac{\tilde{a}_{i}^{*}
-                           \tilde{b}_{i}}{S_{i}}
-
-    We see therefore that the <h|h> and <d|d> are independent of time, but
-    <d|h> is time dependent,
+    We note that <h|h> and <d|d> are time independent while <d|h> is dependent
+    on time
 
     .. math::
 
@@ -635,7 +628,8 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
     def default_stats(self):
         """The stats that ``get_current_stats`` returns by default."""
         return ['logjacobian', 'logprior', 'loglr'] + \
-               ['{}_optimal_snrsq'.format(det) for det in self._data]
+               ['{}_optimal_snrsq'.format(det) for det in self._data] + \
+               ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
 
     def _loglr(self):
         r"""Computes the log likelihood ratio,
@@ -647,11 +641,6 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
             return self._nowaveform_loglr()
         hh = 0.
         hd = 0.
-        prior_min = 0.
-        prior_max = 100.
-        likelihood = 0.
-        time_array = numpy.arange(prior_min, prior_max, 1)
-        delta_t = time_array[1] - time_array[0]
         for det, h in wfs.items():
             # the kmax of the waveforms may be different than internal kmax
             kmax = min(len(h), self._kmax)
@@ -661,7 +650,6 @@ class MarginalizedTimeGaussianNoise(GaussianNoise):
                 hh_i = 0.
                 hd_i = 0j
             else:
-                # whiten the waveform
                 h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                 hd_i = 4. * 1/(delta_t*len(time_array)) * numpy.fft.fft(
                        self.data[det][self._kmin:kmax] *
@@ -695,15 +683,8 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
 
         log L = -\frac{1}{2}\left<d-h|d-h\right>
 
-    where <|> is the inner product between two waveforms and is defined as
-
-    .. math::
-
-        \left<a|b\right> = 4\Delta f \sum_{i=0}^{N/2} \frac{\tilde{a}_{i}^{*}
-                           \tilde{b}_{i}}{S_{i}}
-
-    Therefore <h|h> is inversely proportional to distance squared and <h|d> is
-    inversely proportional to distance. The log likelihood is therefore
+    We see that <h|h> is inversely proportional to distance squared and <h|d>
+    is inversely proportional to distance. The log likelihood is therefore
 
     .. math::
 
@@ -730,7 +711,8 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
     def default_stats(self):
         """The stats that ``get_current_stats`` returns by default."""
         return ['logjacobian', 'logprior', 'loglr'] + \
-               ['{}_optimal_snrsq'.format(det) for det in self._data]
+               ['{}_optimal_snrsq'.format(det) for det in self._data] + \
+               ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
 
     def _loglr(self):
         r"""Computes the log likelihood ratio,
@@ -743,8 +725,7 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
         hh = 0.
         hd = 0.
         likelihood = 0.
-        prior_min = 50
-        prior_max = 5000
+        prior_min, prior_max = 50, 5000
         dist_array = numpy.arange(prior_min, prior_max, 1)
         delta_d = dist_array[1]-dist_array[0]
         for det, h in wfs.items():
@@ -753,11 +734,10 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
             if self._kmin >= kmax:
                 # if the waveform terminates before the filtering low
                 # frequency cutoff, then the loglr is just 0 for this
-                # detectory
+                # detector
                 hh_i = 0.
                 hd_i = 0j
             else:
-                # whiten the waveform
                 h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                 hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
                 hd_i = self.data[det][self._kmin:kmax].inner(
@@ -771,3 +751,100 @@ class MarginalizedDistanceGaussianNoise(GaussianNoise):
         for dist in dist_array:
             likelihood += delta_d * (hd/dist - 0.5*hh/dist**2)
         return numpy.log(likelihood)
+
+class MarginalizedGaussianNoise(GaussianNoise):
+    r"""
+    """
+    def __init__(self, **kwargs):
+        self._margtime = kwargs.get('time_marginalization', False)
+        self._margdist = kwargs.get('distance_marginalization', False)
+        self._margphi  = kwargs.get('phase_marginalization', False)
+    def default_stats(self):
+        """The stats that ``get_current_stats`` returns by default."""
+        if self._margtime == True:
+            return ['logjacobian', 'logprior', 'loglr'] + \
+                   ['{}_optimal_snrsq'.format(det) for det in self._data]
+        else:
+            return ['logjacobian', 'logprior', 'loglr'] + \
+                   ['{}_optimal_snrsq'.format(det) for det in self._data] + \
+                   ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
+    def _loglr(self):
+        r"""Computes the log likelihood ratio,
+        """
+        params = self.current_params
+        try:
+            wfs = self._waveform_generator.generate(**params)
+        except NoWaveformError:
+            return self._nowaveform_loglr()
+        opt_snr = 0.
+        mf_snr = 0j
+        logl = 0.
+        if self_margdist == True:
+            # assume a flat prior between 50 and 5000
+            self._mindist = 50.
+            self._maxdist = 5000.
+            dist_array = numpy.linspace(self._mindist, self._maxdist,
+                         10**4)
+            delta_d = dist_array[1] - dist_array[0]
+        if self._margtime == True:
+            for det, h in wfs.items():
+                # the kmax of the waveforms may be different than internal kmax
+                kmax = min(len(h), self._kmax)
+                if self._kmin >= kmax:
+                   # if the waveform terminates before the filtering low
+                   # frequency cutoff, then the loglr is just 0 for this
+                   # detector
+                   hh_i = 0.
+                   hd_i = 0j
+                else:
+                   hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
+                   hd_i = 4. * 1/(delta_t*len(time_array)) * numpy.fft.ifft(
+                          self.data[det][self._kmin:kmax] *
+                          h[self._kmin:kmax]).real
+                opt_snr += hh_i
+                mf_snr += hd_i
+        else:
+            for det, h in wfs.items():
+                # the kmax of the waveforms may be different than internal kmax
+                kmax = min(len(h), self._kmax)
+                if self._kmin >= kmax:
+                   # if the waveform terminates before the filtering low
+                   # frequency cutoff, then the loglr is just 0 for this
+                   # detector
+                   hh_i = 0.
+                   hd_i = 0j
+                else:
+                    h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
+                    hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
+                    hd_i = self.data[det][self._kmin:kmax].inner(
+                           h[self._kmin:kmax])
+                opt_snr += hh_i
+                mf_snr += hd_i
+        if self._margtime == True:
+            if self._margdist == True:
+                if self._margphi == True:
+                    for dist in dist_array:
+                        logl += delta_d * numpy.log(special.i0e(mf_snr/dist))
+                                + mf_snr/dist - 0.5*opt_snr/dist**2
+                    return logl
+                else:
+                    for dist in dist_array:
+                        logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
+                    return logl
+            elif self._margphi == True:
+                return numpy.log(special.i0e(mf_snr)) + mf_snr - 0.5*opt_snr
+            else:
+                return special.logsumexp(mf_snr - 0.5*opt_snr)
+        else:
+            if self._margdist == True:
+                if self._margphi == True:
+                    for dist in dist_array:
+                        logl += delta_d * (numpy.log(special.i0e(mf_snr/dist))
+                                + mf_snr/dist - 0.5*opt_snr/dist**2)
+                     return logl
+                else:
+                    for dist in dist_array:
+                        logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
+                    return logl
+            else:
+                return numpy.log(special.i0e(mf_snr)) + mf_snr - 0.5*opt_snr
