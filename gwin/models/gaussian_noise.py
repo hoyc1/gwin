@@ -827,8 +827,8 @@ class MarginalizedGaussianNoise(GaussianNoise):
             if self._margdist == True:
                 if self._margphi == True:
                     for dist in dist_array:
-                        logl += delta_d * numpy.log(special.i0e(mf_snr/dist))
-                                + mf_snr/dist - 0.5*opt_snr/dist**2
+                        logl += delta_d * numpy.log(special.i0e(mf_snr/dist)) +
+                                mf_snr/dist - 0.5*opt_snr/dist**2
                     return logl
                 else:
                     for dist in dist_array:
@@ -842,9 +842,9 @@ class MarginalizedGaussianNoise(GaussianNoise):
             if self._margdist == True:
                 if self._margphi == True:
                     for dist in dist_array:
-                        logl += delta_d * (numpy.log(special.i0e(mf_snr/dist))
-                                + mf_snr/dist - 0.5*opt_snr/dist**2)
-                     return logl
+                        logl += delta_d * (numpy.log(special.i0e(mf_snr/dist)) +
+                                mf_snr/dist - 0.5*opt_snr/dist**2)
+                    return logl
                 else:
                     for dist in dist_array:
                         logl += delta_d * (mf_snr/dist - 0.5*opt_snr/dist**2)
