@@ -773,28 +773,6 @@ class MarginalizedGaussianNoise(GaussianNoise):
                    ['{}_optimal_snrsq'.format(det) for det in self._data] + \
                    ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
 
-    def _lookuptable(self, optimal_snr, matchedfilter_snr):
-        r"""Calculates the marginalised likelihood for a range of optimal snrs
-        (<h|h>) and matched filter snrs (<h|d>). The marginalised likelihood
-        for a given optimal snr and matched filter snr is then calculated by
-        interpolation
-        """
-        # Assume a flat distribution from 50Mpc - 5000Mpc
-        self._mindist = 50.
-        self._maxdist = 5000.
-        dist_array = numpy.linspace(self._mindist, self._maxdist, 10**4)
-        delta_d = dist_array[1] - dist_array[0]
-        likelihood = np.zeros()
-        opt_snr = numpy.linspace()
-        mf_snr = numpy.linspace()
-        for ii, opt_snr_ref in enumerate():
-            for jj, mf_snr_ref in enumerate():
-                hh = mf_snr_ref/dist_array
-                hd = opt_snr_ref/dist_array**2
-                likelihood[ii][jj] = special.logsumexp(hh - 0.5*dd, b=delta_d)
-        func = interpolate.interp2d(opt_snr, mf_snr, likelihood)
-        return func(optimal_snr, matchedfilter_snr)
-
     def _loglr(self):
         r"""Computes the log likelihood ratio,
         """
