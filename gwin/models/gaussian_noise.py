@@ -664,11 +664,12 @@ class MarginalizedGaussianNoise(GaussianNoise):
                     hh_i = 0.
                     hd_i = 0j
                 else:
+                    h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                     hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
                     hd_i = self.data[det][self._kmin:kmax].inner(
                            h[self._kmin:kmax])
-                    hd_i_fft = 4. * 1/(h.delta_f) * numpy.fft.ifft(
-                               self.data[det][self._kmin:kmax] *
+                    hd_i_fft = 4. * (h.delta_f) * numpy.fft.fft(
+                               numpy.conj(self.data[det][self._kmin:kmax]) *
                                h[self._kmin:kmax]).real
                 opt_snr += hh_i
                 mf_snr += hd_i
@@ -692,32 +693,35 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 mf_snr += hd_i
         mf_snr = abs(mf_snr)
         if self._margtime and self._margdist and self._margphi:
-            logl = delta_t * numpy.sum(special.i0e(mf_snr_fft))
+            # log likelihood marginalised over time and phase. The phase
+            # marginalization adds the Bessel function and the time
+            # marginalization adds the Fourier transform
+            logl = special.logsumexp(numpy.log(special.i0(mf_snr_fft)),
+                                     b=delta_t)
             logl_marg = logl/dist_array
+            opt_snr_marg = opt_snr/dist_array**2
+            return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=delta_d)
+        elif self._margtime and self._margdist:
+            # log likelihood marginalized over time. 
+            logl = special.logsumexp(mf_snr_fft, b=delta_t)
+            logl_marg = logl/dist_array
+            opt_snr_marg = opt_snr/dist_array**2
+            return special.logsumexp(logl_marg - 0.5*opt_snr_marg,
+                                     b=delta_d)
+        elif self._margtime and self._margphi:
+            return special.logsumexp(numpy.log(special.i0(mf_snr_fft)),
+                                     b=delta_t) - 0.5*opt_snr
+        elif self._margdist and self._margphi:
+            # log likelihood marginalizaled over phase
+            logl = numpy.log(special.i0(mf_snr))
+            logl_marg = logl/dist_array
+            opt_snr_marg = opt_snr/dist_array**2
+            return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=delta_d)
+        elif self._margdist:
             mf_snr_marg = mf_snr/dist_array
             opt_snr_marg = opt_snr/dist_array**2
-            return special.logsumexp(logl_marg + mf_snr_marg-0.5*opt_snr_marg,
-                                     b=delta_d)
-        elif self._margtime and self._margdist:
-            logl = delta_t * numpy.sum(mf_snr_fft)
-            opt_snr_marg = opt_snr/dist_array**2
-            return special.logsumexp(logl - 0.5*opt_snr_marg,
-                                     b=delta_d*delta_t)
-        elif self._margtime and self._margphi:
-            logl = special.logsumexp(special.i0e(mf_snr_fft), b=delta_t)
-            return logl - 0.5*opt_snr
+            return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg, b=delta_d)
         elif self._margtime:
             return special.logsumexp(mf_snr_fft, b=delta_t) - 0.5*opt_snr
-        else:
-            if self._margdist and self._margphi:
-                mf_snr_marg = mf_snr/dist_array
-                opt_snr_marg = opt_snr/dist_array**2
-                return special.logsumexp(numpy.log(special.i0e(mf_snr_marg)) +
-                                         mf_snr_marg - 0.5*opt_snr_marg,
-                                         b=delta_d)
-            elif self._margdist:
-                mf_snr_marg = mf_snr/dist_array
-                opt_snr_marg = opt_snr/dist_array**2
-                return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg,
-                                         b=delta_d)
-            return numpy.log(special.i0e(mf_snr)) + mf_snr - 0.5*opt_snr
+        return numpy.log(special.i0(mf_snr)) - 0.5*opt_snr
+
