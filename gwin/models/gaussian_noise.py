@@ -702,7 +702,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
             opt_snr_marg = opt_snr/dist_array**2
             return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=delta_d)
         elif self._margtime and self._margdist:
-            # log likelihood marginalized over time. 
+            # log likelihood marginalized over time
             logl = special.logsumexp(mf_snr_fft, b=delta_t)
             logl_marg = logl/dist_array
             opt_snr_marg = opt_snr/dist_array**2
@@ -724,4 +724,3 @@ class MarginalizedGaussianNoise(GaussianNoise):
         elif self._margtime:
             return special.logsumexp(mf_snr_fft, b=delta_t) - 0.5*opt_snr
         return numpy.log(special.i0(mf_snr)) - 0.5*opt_snr
-
