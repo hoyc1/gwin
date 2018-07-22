@@ -580,11 +580,11 @@ class MarginalizedGaussianNoise(GaussianNoise):
 
         \left<d|h\right>(k\Delta t) = 2\Delta f FFT_{k} (\frac{dh}{S})
 
-    Meaning that the likelihood for each integer timestep is,
+    since :math:: `\left<h|d\right> = \left<d|h\right>^{*}`,
 
     .. math::
 
-        log L(k\Delta t) = -1/2<d|d> - 1/2 <h|h> + Re(d|h)
+        \left<d|h\right> + \left<h|d\right> = 4\Delta f FFT_{k} (\frac{dh}{S})
 
     and so the likelihood marginalised over time is simply
 
@@ -666,14 +666,13 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 else:
                     h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                     hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
-                    hd_i = self.data[det][self._kmin:kmax].inner(
-                           h[self._kmin:kmax])
                     hd_i_fft = 4. * (h.delta_f) * numpy.fft.fft(
                                numpy.conj(self.data[det][self._kmin:kmax]) *
                                h[self._kmin:kmax]).real
                 opt_snr += hh_i
-                mf_snr += hd_i
                 mf_snr_fft += hd_i_fft
+                setattr(self._current_stats, '{}_optimal_snrsq'.format(det),
+                        hh_i)
         else:
             for det, h in wfs.items():
                 # the kmax of the waveforms may be different than internal kmax
@@ -691,6 +690,10 @@ class MarginalizedGaussianNoise(GaussianNoise):
                            h[self._kmin:kmax])
                 opt_snr += hh_i
                 mf_snr += hd_i
+                setattr(self._current_stats, '{}_optimal_snrsq'.format(det),
+                        hh_i)
+                setattr(self._current_stats,
+                        '{}_matchedfilter_snrsq'.format(det), hd_i)
         mf_snr = abs(mf_snr)
         if self._margtime and self._margdist and self._margphi:
             # log likelihood marginalised over time and phase. The phase
