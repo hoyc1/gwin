@@ -651,47 +651,31 @@ class MarginalizedGaussianNoise(GaussianNoise):
             self._priormax = 5000.
             dist_array = numpy.linspace(self._priormin, self._priormax, 10**4)
             delta_d = dist_array[1] - dist_array[0]
-        if self._margtime:
-            mf_snr_fft = 0.
-            for det, h in wfs.items():
-                delta_t = h.delta_t
-                # the kmax of the waveforms may be different than internal kmax
-                kmax = min(len(h), self._kmax)
-                if self._kmin >= kmax:
-                    # if the waveform terminates before the filtering low
-                    # frequency cutoff, then the loglr is just 0 for this
-                    # detector
-                    hh_i = 0.
-                    hd_i = 0j
-                else:
-                    h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
-                    hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
-                    hd_i_fft = 4. * (h.delta_f) * numpy.fft.fft(
+        for det, h in wfs.items():
+            # the kmax of the waveforms may be different than internal kmax
+            kmax = min(len(h), self._kmax)
+            # time step
+            delta_t = h.delta_t
+            if self._kmin >= kmax:
+                # if the waveform terminates before the filtering low
+                # frequency cutoff, then the loglr is just 0 for this
+                # detector
+                hh_i = 0.
+                hd_i = 0j
+            else:
+                h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
+                hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
+                if self._margtime:
+                    hd_i = 4. * (h.delta_f) * numpy.fft.fft(
                                numpy.conj(self.data[det][self._kmin:kmax]) *
                                h[self._kmin:kmax]).real
-                opt_snr += hh_i
-                mf_snr_fft += hd_i_fft
-                setattr(self._current_stats, '{}_optimal_snrsq'.format(det),
-                        hh_i)
-        else:
-            for det, h in wfs.items():
-                # the kmax of the waveforms may be different than internal kmax
-                kmax = min(len(h), self._kmax)
-                if self._kmin >= kmax:
-                    # if the waveform terminates before the filtering low
-                    # frequency cutoff, then the loglr is just 0 for this
-                    # detector
-                    hh_i = 0.
-                    hd_i = 0j
                 else:
-                    h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
-                    hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
                     hd_i = self.data[det][self._kmin:kmax].inner(
                            h[self._kmin:kmax])
-                opt_snr += hh_i
-                mf_snr += hd_i
-                setattr(self._current_stats, '{}_optimal_snrsq'.format(det),
-                        hh_i)
+            opt_snr += hh_i
+            mf_snr += hd_i
+            setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh_i)
+            if self._margdist or self._margphi:
                 setattr(self._current_stats,
                         '{}_matchedfilter_snrsq'.format(det), hd_i)
         mf_snr = abs(mf_snr)
@@ -699,20 +683,20 @@ class MarginalizedGaussianNoise(GaussianNoise):
             # log likelihood marginalised over time and phase. The phase
             # marginalization adds the Bessel function and the time
             # marginalization adds the Fourier transform
-            logl = special.logsumexp(numpy.log(special.i0(mf_snr_fft)),
+            logl = special.logsumexp(numpy.log(special.i0(mf_snr)),
                                      b=delta_t)
             logl_marg = logl/dist_array
             opt_snr_marg = opt_snr/dist_array**2
             return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=delta_d)
         elif self._margtime and self._margdist:
             # log likelihood marginalized over time
-            logl = special.logsumexp(mf_snr_fft, b=delta_t)
+            logl = special.logsumexp(mf_snr, b=delta_t)
             logl_marg = logl/dist_array
             opt_snr_marg = opt_snr/dist_array**2
             return special.logsumexp(logl_marg - 0.5*opt_snr_marg,
                                      b=delta_d)
         elif self._margtime and self._margphi:
-            return special.logsumexp(numpy.log(special.i0(mf_snr_fft)),
+            return special.logsumexp(numpy.log(special.i0(mf_snr)),
                                      b=delta_t) - 0.5*opt_snr
         elif self._margdist and self._margphi:
             # log likelihood marginalizaled over phase
@@ -725,5 +709,5 @@ class MarginalizedGaussianNoise(GaussianNoise):
             opt_snr_marg = opt_snr/dist_array**2
             return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg, b=delta_d)
         elif self._margtime:
-            return special.logsumexp(mf_snr_fft, b=delta_t) - 0.5*opt_snr
+            return special.logsumexp(mf_snr, b=delta_t) - 0.5*opt_snr
         return numpy.log(special.i0(mf_snr)) - 0.5*opt_snr
