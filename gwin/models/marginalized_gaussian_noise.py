@@ -1,4 +1,4 @@
-# Copyright (C) 2018  Collin Capano
+# Copyright (C) 2018  Charlie Hoy
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
@@ -230,19 +230,20 @@ class MarginalizedGaussianNoise(GaussianNoise):
         self._margtime = time_marginalization
         self._margdist = distance_marginalization
         self._margphase = phase_marginalization
-        if self._margtime and self._margdist and self._margphase:
+        args = (int(self._margtime), int(self._margdist), int(self._margphase))
+        if args == (1, 1, 1):
             self._eval_loglr = self._margtimephasedist_loglr
-        elif self._margtime and self._margdist:
+        elif args == (1, 1, 0):
             self._eval_loglr = self._margtimedist_loglr
-        elif self._margtime and self._margphase:
+        elif args == (1, 0, 1):
             self._eval_loglr = self._margtimephase_loglr
-        elif self._margdist and self._margphase:
+        elif args == (0, 1, 1):
             self._eval_loglr = self._margdistphase_loglr
-        elif self._margdist:
+        elif args == (0, 1, 0):
             self._eval_loglr = self._margdist_loglr
-        elif self._margtime:
+        elif args == (1, 0, 0):
             self._eval_loglr = self._margtime_loglr
-        elif self._margphase:
+        elif args == (0, 0, 1):
             self._eval_loglr = self._margphase_loglr
         super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
                                                         waveform_generator,
@@ -371,4 +372,6 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 setattr(self._current_stats,
                         '{}_matchedfilter_snrsq'.format(det), hd_i)
         mf_snr = abs(mf_snr)
+        setattr(self._current_stats, '{}_cplx_loglr'.format(det),
+                self._eval_loglr(mf_snr, opt_snr))
         return self._eval_loglr(mf_snr, opt_snr)
