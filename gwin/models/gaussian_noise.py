@@ -23,6 +23,7 @@ from scipy import interpolate
 from pycbc import filter
 from pycbc.waveform import NoWaveformError
 from pycbc.types import Array
+from pycbc.filter.matchedfilter import matched_filter_core
 
 from .base_data import BaseDataModel
 
@@ -600,13 +601,13 @@ class MarginalizedGaussianNoise(GaussianNoise):
 
     Parameters
     ----------
-    time_marginalization : {False, boolean}
+    time_marginalization : bool, optional
         A Boolean operator which determines if the likelihood is marginalized
         over time
-    phase_marginalization : {False, boolean}
+    phase_marginalization : bool, optional
         A Boolean operator which determines if the likelihood is marginalized
         over phase
-    distance_marginalization : {False, boolean}
+    distance_marginalization : bool, optional
         A Boolean operator which determines if the likelihood is marginalized
         over distance
     **kwargs :
@@ -619,7 +620,21 @@ class MarginalizedGaussianNoise(GaussianNoise):
                  phase_marginalization=False, **kwargs):
         self._margtime = time_marginalization
         self._margdist = distance_marginalization
-        self._margphi = phase_marginalization
+        self._margphase = phase_marginalization
+        if self._margtime and self._margdist and self._margphase:
+            self._eval_loglr = self._margtimephasedist_loglr
+        elif self._margtime and self._margdist:
+            self._eval_loglr = self._margtimedist_loglr
+        elif self._margtime and self._margphase:
+            self._eval_loglr = self._margtimephase_loglr
+        elif self._margdist and self._margphase:
+            self._eval_loglr = self._margdistphase_loglr
+        elif self._margdist:
+            self._eval_loglr = self._margdist_loglr
+        elif self._margtime:
+            self._eval_loglr = self._margtime_loglr
+        elif self._margphase:
+            self._eval_loglr = self._margphase_loglr
         super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
                                                         waveform_generator,
                                                         f_lower, psds, f_upper,
@@ -636,8 +651,74 @@ class MarginalizedGaussianNoise(GaussianNoise):
                    ['{}_optimal_snrsq'.format(det) for det in self._data] + \
                    ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
 
+    def _margtimephasedist_loglr(self, mf_snr, opt_snr):
+        """Returns the log likelihood ratio marginalized over time, phase and
+        distance
+        """
+        logl = special.logsumexp(numpy.log(special.i0(mf_snr)),
+                                 b=self._deltat)
+        logl_marg = logl/self._dist_array
+        opt_snr_marg = opt_snr/self._dist_array**2
+        return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=self._deltad)
+
+    def _margtimedist_loglr(self, mf_snr, opt_snr):
+        """Returns the log likelihood ratio marginalized over time and
+        distance
+        """
+        logl = special.logsumexp(mf_snr, b=self._deltat)
+        logl_marg = logl/self._dist_array
+        opt_snr_marg = opt_snr/self._dist_array**2
+        return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=self._deltad)
+
+    def _margtimephase_loglr(self, mf_snr, opt_snr):
+        """Returns the log likelihood ratio marginalized over time and phase
+        """
+        return special.logsumexp(numpy.log(special.i0(mf_snr)),
+                                 b=self._deltat) - 0.5*opt_snr
+
+    def _margdistphase_loglr(self, mf_snr, opt_snr):
+        """Returns the log likelihood ratio marginalized over distance and
+        phase
+        """
+        logl = numpy.log(special.i0(mf_snr))
+        logl_marg = logl/self._dist_array
+        opt_snr_marg = opt_snr/self._dist_array**2
+        return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=self._deltad)
+
+    def _margdist_loglr(self, mf_snr, opt_snr):
+        """Returns the log likelihood ratio marginalized over distance
+        """
+        mf_snr_marg = mf_snr/self._dist_array
+        opt_snr_marg = opt_snr/self._dist_array**2
+        return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg,
+                                 b=self._deltad)
+
+    def _margtime_loglr(self, mf_snr, opt_snr):
+        """Returns the log likelihood ratio marginalized over time
+        """
+        return special.logsumexp(mf_snr, b=self._deltat) - 0.5*opt_snr
+
+    def _margphase_loglr(self, mf_snr, opt_snr):
+        """Returns the log likelihood ratio marginalized over phase
+        """
+        return numpy.log(special.i0(mf_snr)) - 0.5*opt_snr
+
     def _loglr(self):
         r"""Computes the log likelihood ratio,
+
+        .. math::
+
+            \log \mathcal{L}(\Theta) = \sum_i
+                \left<h_i(\Theta)|d_i\right> -
+                \frac{1}{2}\left<h_i(\Theta)|h_i(\Theta)\right>,
+
+        at the current parameter values :math:`\Theta`.
+
+        Returns
+        -------
+        float
+            The value of the log likelihood ratio evaluated at the given point.
+
         """
         params = self.current_params
         try:
@@ -649,13 +730,14 @@ class MarginalizedGaussianNoise(GaussianNoise):
         if self._margdist:
             self._priormin = 50.
             self._priormax = 5000.
-            dist_array = numpy.linspace(self._priormin, self._priormax, 10**4)
-            delta_d = dist_array[1] - dist_array[0]
+            self._dist_array = numpy.linspace(self._priormin, self._priormax,
+                                              10**4)
+            self._deltad = self._dist_array[1] - self._dist_array[0]
         for det, h in wfs.items():
             # the kmax of the waveforms may be different than internal kmax
             kmax = min(len(h), self._kmax)
             # time step
-            delta_t = h.delta_t
+            self._deltat = h.delta_t
             if self._kmin >= kmax:
                 # if the waveform terminates before the filtering low
                 # frequency cutoff, then the loglr is just 0 for this
@@ -666,48 +748,18 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                 hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
                 if self._margtime:
-                    hd_i = 4. * (h.delta_f) * numpy.fft.fft(
-                               numpy.conj(self.data[det][self._kmin:kmax]) *
-                               h[self._kmin:kmax]).real
+                    snr = matched_filter_core(h[self._kmin:kmax],
+                                              self.data[det][self._kmin:kmax],
+                                              h_norm=1, psd=None)
+                    hd_i = snr[0].numpy().real
                 else:
                     hd_i = self.data[det][self._kmin:kmax].inner(
                            h[self._kmin:kmax])
             opt_snr += hh_i
             mf_snr += hd_i
             setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh_i)
-            if self._margdist or self._margphi:
+            if self._margdist or self._margphase:
                 setattr(self._current_stats,
                         '{}_matchedfilter_snrsq'.format(det), hd_i)
         mf_snr = abs(mf_snr)
-        if self._margtime and self._margdist and self._margphi:
-            # log likelihood marginalised over time and phase. The phase
-            # marginalization adds the Bessel function and the time
-            # marginalization adds the Fourier transform
-            logl = special.logsumexp(numpy.log(special.i0(mf_snr)),
-                                     b=delta_t)
-            logl_marg = logl/dist_array
-            opt_snr_marg = opt_snr/dist_array**2
-            return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=delta_d)
-        elif self._margtime and self._margdist:
-            # log likelihood marginalized over time
-            logl = special.logsumexp(mf_snr, b=delta_t)
-            logl_marg = logl/dist_array
-            opt_snr_marg = opt_snr/dist_array**2
-            return special.logsumexp(logl_marg - 0.5*opt_snr_marg,
-                                     b=delta_d)
-        elif self._margtime and self._margphi:
-            return special.logsumexp(numpy.log(special.i0(mf_snr)),
-                                     b=delta_t) - 0.5*opt_snr
-        elif self._margdist and self._margphi:
-            # log likelihood marginalizaled over phase
-            logl = numpy.log(special.i0(mf_snr))
-            logl_marg = logl/dist_array
-            opt_snr_marg = opt_snr/dist_array**2
-            return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=delta_d)
-        elif self._margdist:
-            mf_snr_marg = mf_snr/dist_array
-            opt_snr_marg = opt_snr/dist_array**2
-            return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg, b=delta_d)
-        elif self._margtime:
-            return special.logsumexp(mf_snr, b=delta_t) - 0.5*opt_snr
-        return numpy.log(special.i0(mf_snr)) - 0.5*opt_snr
+        return self._eval_loglr(mf_snr, opt_snr)
