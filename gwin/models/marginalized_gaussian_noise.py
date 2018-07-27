@@ -230,21 +230,15 @@ class MarginalizedGaussianNoise(GaussianNoise):
         self._margtime = time_marginalization
         self._margdist = distance_marginalization
         self._margphase = phase_marginalization
+        mydict = {(1, 1, 1):self._margtimephasedist_loglr,
+                  (1, 1, 0):self._margtimedist_loglr,
+                  (1, 0, 1):self._margtimephase_loglr,
+                  (0, 1, 1):self._margdistphase_loglr,
+                  (0, 1, 0):self._margdist_loglr,
+                  (1, 0, 0):self._margtime_loglr,
+                  (0, 0, 1):self._margphase_loglr}
         args = (int(self._margtime), int(self._margdist), int(self._margphase))
-        if args == (1, 1, 1):
-            self._eval_loglr = self._margtimephasedist_loglr
-        elif args == (1, 1, 0):
-            self._eval_loglr = self._margtimedist_loglr
-        elif args == (1, 0, 1):
-            self._eval_loglr = self._margtimephase_loglr
-        elif args == (0, 1, 1):
-            self._eval_loglr = self._margdistphase_loglr
-        elif args == (0, 1, 0):
-            self._eval_loglr = self._margdist_loglr
-        elif args == (1, 0, 0):
-            self._eval_loglr = self._margtime_loglr
-        elif args == (0, 0, 1):
-            self._eval_loglr = self._margphase_loglr
+        self._eval_loglr = mydict[args]
         super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
                                                         waveform_generator,
                                                         f_lower, psds, f_upper,
