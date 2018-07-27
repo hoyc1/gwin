@@ -160,7 +160,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
 
     .. math::
 
-        log L = -\frac{1}{2}\left<d-h|d-h\right>
+        \log L = -\frac{1}{2}\left<d-h|d-h\right>
 
     We note that :math: `<h|h>` and :math: `<d|d>` are time independent while
     :math: `<d|h>` is dependent of time
@@ -230,6 +230,13 @@ class MarginalizedGaussianNoise(GaussianNoise):
         self._margtime = time_marginalization
         self._margdist = distance_marginalization
         self._margphase = phase_marginalization
+        # setup the prior to be used in the time and distance marginalization
+        if self._margdist:
+            self._priormin = 50.
+            self._priormax = 5000.
+            self._dist_array = numpy.linspace(self._priormin, self._priormax,
+                                              10**4)
+            self._deltad = self._dist_array[1] - self._dist_array[0]
         # dictionary containing possible techniques to evalulate the log
         # likelihood ratio.
         loglr_poss = {(1, 1, 1): self._margtimephasedist_loglr,
@@ -245,8 +252,13 @@ class MarginalizedGaussianNoise(GaussianNoise):
         mfsnr_poss = {(1): self._margtime_mfsnr,
                       (0): self._mfsnr}
         args = (int(self._margtime), int(self._margdist), int(self._margphase))
-        self._eval_loglr = loglr_poss[args]
-        self._eval_mfsnr = mfsnr_poss[args[0]]
+        if args = (0, 0, 0):
+            return TypeError("This class requires that you marginalize over at
+                             least one parameter. You have not marginalized
+                             over any.")
+        else:
+            self._eval_loglr = loglr_poss[args]
+            self._eval_mfsnr = mfsnr_poss[args[0]]
         super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
                                                         waveform_generator,
                                                         f_lower, psds, f_upper,
@@ -255,13 +267,9 @@ class MarginalizedGaussianNoise(GaussianNoise):
     @property
     def default_stats(self):
         """The stats that ``get_current_stats`` returns by default."""
-        if self._margtime:
-            return ['logjacobian', 'logprior', 'loglr'] + \
-                   ['{}_optimal_snrsq'.format(det) for det in self._data]
-        else:
-            return ['logjacobian', 'logprior', 'loglr'] + \
-                   ['{}_optimal_snrsq'.format(det) for det in self._data] + \
-                   ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
+        return ['logjacobian', 'logprior', 'loglr'] + \
+               ['{}_optimal_snrsq'.format(det) for det in self._data] + \
+               ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
 
     def _margtime_mfsnr(self, template, data):
         """Returns a time series for the matched filter SNR assuming that the
@@ -354,12 +362,6 @@ class MarginalizedGaussianNoise(GaussianNoise):
             return self._nowaveform_loglr()
         opt_snr = 0.
         mf_snr = 0j
-        if self._margdist:
-            self._priormin = 50.
-            self._priormax = 5000.
-            self._dist_array = numpy.linspace(self._priormin, self._priormax,
-                                              10**4)
-            self._deltad = self._dist_array[1] - self._dist_array[0]
         for det, h in wfs.items():
             # the kmax of the waveforms may be different than internal kmax
             kmax = min(len(h), self._kmax)
@@ -379,9 +381,8 @@ class MarginalizedGaussianNoise(GaussianNoise):
             opt_snr += hh_i
             mf_snr += hd_i
             setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh_i)
-            if self._margdist or self._margphase:
-                setattr(self._current_stats,
-                        '{}_matchedfilter_snrsq'.format(det), hd_i)
+            setattr(self._current_stats, '{}_matchedfilter_snrsq'.format(det),
+                    hd_i)
         mf_snr = abs(mf_snr)
         loglr = self._eval_loglr(mf_snr, opt_snr)
         setattr(self._current_stats, '{}_cplx_loglr'.format(det), loglr)
