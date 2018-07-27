@@ -230,15 +230,23 @@ class MarginalizedGaussianNoise(GaussianNoise):
         self._margtime = time_marginalization
         self._margdist = distance_marginalization
         self._margphase = phase_marginalization
-        mydict = {(1, 1, 1): self._margtimephasedist_loglr,
-                  (1, 1, 0): self._margtimedist_loglr,
-                  (1, 0, 1): self._margtimephase_loglr,
-                  (0, 1, 1): self._margdistphase_loglr,
-                  (0, 1, 0): self._margdist_loglr,
-                  (1, 0, 0): self._margtime_loglr,
-                  (0, 0, 1): self._margphase_loglr}
+        # dictionary containing possible techniques to evalulate the log
+        # likelihood ratio.
+        loglr_poss = {(1, 1, 1): self._margtimephasedist_loglr,
+                      (1, 1, 0): self._margtimedist_loglr,
+                      (1, 0, 1): self._margtimephase_loglr,
+                      (0, 1, 1): self._margdistphase_loglr,
+                      (0, 1, 0): self._margdist_loglr,
+                      (1, 0, 0): self._margtime_loglr,
+                      (0, 0, 1): self._margphase_loglr}
+        # dictionary containing two techniques to calculate the matched
+        # filter SNR depending on whether time has been marginalised over or
+        # not.
+        mfsnr_poss = {(1): self._margtime_mfsnr,
+                      (0): self._mfsnr}
         args = (int(self._margtime), int(self._margdist), int(self._margphase))
-        self._eval_loglr = mydict[args]
+        self._eval_loglr = loglr_poss[args]
+        self._eval_mfsnr = mfsnr_poss[args[0]]
         super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
                                                         waveform_generator,
                                                         f_lower, psds, f_upper,
@@ -255,9 +263,24 @@ class MarginalizedGaussianNoise(GaussianNoise):
                    ['{}_optimal_snrsq'.format(det) for det in self._data] + \
                    ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
 
+    def _margtime_mfsnr(self, template, data):
+        """Returns a time series for the matched filter SNR assuming that the
+        template and data have both been normalised and whitened.
+        """
+        snr = matched_filter_core(template, data, h_norm=1, psd=None)
+        hd_i = snr[0].numpy().real
+        return hd_i
+
+    def _mfsnr(self, template, data):
+        """Returns the matched filter SNR assuming that the template and data
+        have both been normalised and whitened.
+        """
+        hd_i = data.inner(template)
+        return hd_i
+
     def _margtimephasedist_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over time, phase and
-        distance
+        istance
         """
         logl = special.logsumexp(numpy.log(special.i0(mf_snr)),
                                  b=self._deltat)
@@ -351,14 +374,8 @@ class MarginalizedGaussianNoise(GaussianNoise):
             else:
                 h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
                 hh_i = h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
-                if self._margtime:
-                    snr = matched_filter_core(h[self._kmin:kmax],
-                                              self.data[det][self._kmin:kmax],
-                                              h_norm=1, psd=None)
-                    hd_i = snr[0].numpy().real
-                else:
-                    hd_i = self.data[det][self._kmin:kmax].inner(
-                           h[self._kmin:kmax])
+                hd_i = self._eval_mfsnr(h[self._kmin:kmax],
+                                        self.data[det][self._kmin:kmax])
             opt_snr += hh_i
             mf_snr += hd_i
             setattr(self._current_stats, '{}_optimal_snrsq'.format(det), hh_i)
@@ -366,6 +383,6 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 setattr(self._current_stats,
                         '{}_matchedfilter_snrsq'.format(det), hd_i)
         mf_snr = abs(mf_snr)
-        setattr(self._current_stats, '{}_cplx_loglr'.format(det),
-                self._eval_loglr(mf_snr, opt_snr))
-        return self._eval_loglr(mf_snr, opt_snr)
+        loglr = self._eval_loglr(mf_snr, opt_snr)
+        setattr(self._current_stats, '{}_cplx_loglr'.format(det), loglr)
+        return loglr
