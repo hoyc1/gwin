@@ -252,10 +252,10 @@ class MarginalizedGaussianNoise(GaussianNoise):
         mfsnr_poss = {(1): self._margtime_mfsnr,
                       (0): self._mfsnr}
         args = (int(self._margtime), int(self._margdist), int(self._margphase))
-        if args = (0, 0, 0):
-            return TypeError("This class requires that you marginalize over at
-                             least one parameter. You have not marginalized
-                             over any.")
+        if args == (0, 0, 0):
+            return TypeError("This class requires that you marginalize over \
+                             at least one parameter. You have not \
+                             marginalized over any.")
         else:
             self._eval_loglr = loglr_poss[args]
             self._eval_mfsnr = mfsnr_poss[args[0]]
