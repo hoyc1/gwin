@@ -298,13 +298,8 @@ class MarginalizedGaussianNoise(GaussianNoise):
                                  "{}-variable".format(prior_section))
         params = [i.params[0] for i in marg_prior]
         marg_args = [k for k, v in args.items() if "_marginalization" in k]
-        for i in marg_args:
-            if i.replace('_marginalization', '') in params:
-                pass
-            else:
-                raise ValueError("{} is specified in the models section of "
-                                 "the config file but does not have a "
-                                 "corresponding distribution".format(i))
+        if len(marg_args) != len(params):
+            raise ValueError("There is not a prior for each keyword argument")
         kwargs['marg_prior'] = marg_prior
         for i in params:
             kwargs[i+"_marginalization"] = True
