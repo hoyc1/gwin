@@ -26,6 +26,7 @@ from pycbc import filter
 from pycbc.waveform import NoWaveformError
 from pycbc.types import Array
 from pycbc.filter.matchedfilter import matched_filter_core
+from pycbc.distributions import read_distributions_from_config
 
 from .base_data import BaseDataModel
 from .gaussian_noise import GaussianNoise
@@ -219,6 +220,9 @@ class MarginalizedGaussianNoise(GaussianNoise):
     distance_marginalization : bool, optional
         A Boolean operator which determines if the likelihood is marginalized
         over distance
+    prior : list, optional
+        An instance of pycbc.distributions which returns a list of prior
+        distributions to be used when marginalizing the likelihood
     **kwargs :
         All other keyword arguments are passed to ``GaussianNoise``.
     """
@@ -226,39 +230,40 @@ class MarginalizedGaussianNoise(GaussianNoise):
     def __init__(self, variable_params, data, waveform_generator,
                  f_lower, psds=None, f_upper=None, norm=None,
                  time_marginalization=False, distance_marginalization=False,
-                 phase_marginalization=False, **kwargs):
+                 phase_marginalization=False, marg_prior=None, **kwargs):
         self._margtime = time_marginalization
         self._margdist = distance_marginalization
         self._margphase = phase_marginalization
-        # setup the prior to be used in the time and distance marginalization
-        if self._margdist:
-            self._priormin = 50.
-            self._priormax = 5000.
-            self._dist_array = numpy.linspace(self._priormin, self._priormax,
-                                              10**4)
-            self._deltad = self._dist_array[1] - self._dist_array[0]
         # dictionary containing possible techniques to evalulate the log
         # likelihood ratio.
         loglr_poss = {(1, 1, 1): self._margtimephasedist_loglr,
-                      (1, 1, 0): self._margtimedist_loglr,
-                      (1, 0, 1): self._margtimephase_loglr,
-                      (0, 1, 1): self._margdistphase_loglr,
-                      (0, 1, 0): self._margdist_loglr,
-                      (1, 0, 0): self._margtime_loglr,
-                      (0, 0, 1): self._margphase_loglr}
+                      (1, 0, 1): self._margtimedist_loglr,
+                      (0, 1, 1): self._margtimephase_loglr,
+                      (1, 1, 0): self._margdistphase_loglr,
+                      (1, 0, 0): self._margdist_loglr,
+                      (0, 0, 1): self._margtime_loglr,
+                      (0, 1, 0): self._margphase_loglr}
         # dictionary containing two techniques to calculate the matched
         # filter SNR depending on whether time has been marginalised over or
         # not.
-        mfsnr_poss = {(1): self._margtime_mfsnr,
-                      (0): self._mfsnr}
-        args = (int(self._margtime), int(self._margdist), int(self._margphase))
-        if args == (0, 0, 0):
-            return TypeError("This class requires that you marginalize over \
-                             at least one parameter. You have not \
-                             marginalized over any.")
+        mfsnr_poss = {(1): self._margtime_mfsnr, (0): self._mfsnr}
+        self._args = (int(self._margdist), int(self._margphase),
+                      int(self._margtime))
+        if self._args == (0, 0, 0):
+            raise AttributeError("This class requires that you marginalize "
+                                 "over at least one parameter. You have not "
+                                 "marginalized over any.")
         else:
-            self._eval_loglr = loglr_poss[args]
-            self._eval_mfsnr = mfsnr_poss[args[0]]
+            self._eval_loglr = loglr_poss[self._args]
+            self._eval_mfsnr = mfsnr_poss[self._args[2]]
+        if marg_prior is None:
+            raise AttributeError("No priors are specified for the "
+                                 "marginalization. This is needed to "
+                                 "calculated the marginalized likelihood")
+        else:
+            self._marg_prior = dict(zip([i.params[0] for i in marg_prior],
+                                    marg_prior))
+            self._setup_prior()
         super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
                                                         waveform_generator,
                                                         f_lower, psds, f_upper,
@@ -270,6 +275,70 @@ class MarginalizedGaussianNoise(GaussianNoise):
         return ['logjacobian', 'logprior', 'loglr'] + \
                ['{}_optimal_snrsq'.format(det) for det in self._data] + \
                ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
+
+    @classmethod
+    def from_config(cls, cp, **kwargs):
+        """Initializes an instance of this class from the given config file.
+
+        Parameters
+        ----------
+        cp : WorkflowConfigParser
+            Config file parser to read.
+        \**kwargs :
+            All additional keyword arguments are passed to the class. Any
+            provided keyword will over ride what is in the config file.
+        """
+        prior_section = "marginalized_prior"
+        args = cls._init_args_from_config(cp)
+        marg_prior = read_distributions_from_config(cp, prior_section)
+        if len(marg_prior) == 0:
+            raise AttributeError("No priors are specified for the "
+                                 "marginalization. Please specify this in a "
+                                 "section in the config file with heading "
+                                 "{}-variable".format(prior_section))
+        params = [i.params[0] for i in marg_prior]
+        marg_args = [k for k, v in args.items() if "_marginalization" in k]
+        for i in marg_args:
+            if i.replace('_marginalization', '') in params:
+                pass
+            else:
+                raise ValueError("{} is specified in the models section of "
+                                 "the config file but does not have a "
+                                 "corresponding distribution".format(i))
+        kwargs['marg_prior'] = marg_prior
+        for i in params:
+            kwargs[i+"_marginalization"] = True
+        args.update(kwargs)
+        return cls(**args)
+
+    def _setup_prior(self):
+        """Sets up the prior for time and/or distance and/or phase which is
+        used for the likelihood marginalization.
+        """
+        if len(self._marg_prior) == 0:
+            raise ValueError("A prior must be specified for the parameters "
+                             "that you wish to marginalize the likelihood "
+                             "over")
+        marg_number = len([i for i in self._args if i != 0])
+        if len(self._marg_prior) != marg_number:
+            raise AttributeError("There is not a prior for each keyword "
+                                 "argument")
+        if self._margdist:
+            bounds = self._marg_prior["distance"].bounds
+            self._dist_array = numpy.linspace(bounds["distance"].min,
+                                              bounds["distance"].max,
+                                              10**4)
+            self._deltad = self._dist_array[1] - self._dist_array[0]
+        if self._margtime:
+            bounds = self._marg_prior["time"].bounds
+            self._time_array = numpy.linspace(bounds["time"].min,
+                                              bounds["time"].min,
+                                              10**4)
+        if self._margphase:
+            bounds = self._marg_prior["phase"].bounds
+            self._phase_array = numpy.linspace(bounds["phase"].min,
+                                               bounds["phase"].max,
+                                               10**4)
 
     def _margtime_mfsnr(self, template, data):
         """Returns a time series for the matched filter SNR assuming that the
@@ -288,7 +357,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
 
     def _margtimephasedist_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over time, phase and
-        istance
+        distance.
         """
         logl = special.logsumexp(numpy.log(special.i0(mf_snr)),
                                  b=self._deltat)
@@ -298,7 +367,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
 
     def _margtimedist_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over time and
-        distance
+        distance.
         """
         logl = special.logsumexp(mf_snr, b=self._deltat)
         logl_marg = logl/self._dist_array
@@ -306,14 +375,14 @@ class MarginalizedGaussianNoise(GaussianNoise):
         return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=self._deltad)
 
     def _margtimephase_loglr(self, mf_snr, opt_snr):
-        """Returns the log likelihood ratio marginalized over time and phase
+        """Returns the log likelihood ratio marginalized over time and phase.
         """
         return special.logsumexp(numpy.log(special.i0(mf_snr)),
                                  b=self._deltat) - 0.5*opt_snr
 
     def _margdistphase_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over distance and
-        phase
+        phase.
         """
         logl = numpy.log(special.i0(mf_snr))
         logl_marg = logl/self._dist_array
@@ -321,7 +390,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
         return special.logsumexp(logl_marg - 0.5*opt_snr_marg, b=self._deltad)
 
     def _margdist_loglr(self, mf_snr, opt_snr):
-        """Returns the log likelihood ratio marginalized over distance
+        """Returns the log likelihood ratio marginalized over distance.
         """
         mf_snr_marg = mf_snr/self._dist_array
         opt_snr_marg = opt_snr/self._dist_array**2
@@ -329,12 +398,12 @@ class MarginalizedGaussianNoise(GaussianNoise):
                                  b=self._deltad)
 
     def _margtime_loglr(self, mf_snr, opt_snr):
-        """Returns the log likelihood ratio marginalized over time
+        """Returns the log likelihood ratio marginalized over time.
         """
         return special.logsumexp(mf_snr, b=self._deltat) - 0.5*opt_snr
 
     def _margphase_loglr(self, mf_snr, opt_snr):
-        """Returns the log likelihood ratio marginalized over phase
+        """Returns the log likelihood ratio marginalized over phase.
         """
         return numpy.log(special.i0(mf_snr)) - 0.5*opt_snr
 
@@ -385,5 +454,4 @@ class MarginalizedGaussianNoise(GaussianNoise):
                     hd_i)
         mf_snr = abs(mf_snr)
         loglr = self._eval_loglr(mf_snr, opt_snr)
-        setattr(self._current_stats, '{}_cplx_loglr'.format(det), loglr)
         return loglr
