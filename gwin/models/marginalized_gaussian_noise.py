@@ -27,9 +27,11 @@ from pycbc.waveform import NoWaveformError
 from pycbc.types import Array
 from pycbc.filter.matchedfilter import matched_filter_core
 from pycbc.distributions import read_distributions_from_config
+from pycbc.waveform import generator
 
 from .base_data import BaseDataModel
 from .gaussian_noise import GaussianNoise
+from .base import SamplingTransforms
 
 
 class MarginalizedGaussianNoise(GaussianNoise):
@@ -231,6 +233,10 @@ class MarginalizedGaussianNoise(GaussianNoise):
                  f_lower, psds=None, f_upper=None, norm=None,
                  time_marginalization=False, distance_marginalization=False,
                  phase_marginalization=False, marg_prior=None, **kwargs):
+        super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
+                                                        waveform_generator,
+                                                        f_lower, psds, f_upper,
+                                                        norm, **kwargs)
         self._margtime = time_marginalization
         self._margdist = distance_marginalization
         self._margphase = phase_marginalization
@@ -264,10 +270,6 @@ class MarginalizedGaussianNoise(GaussianNoise):
             self._marg_prior = dict(zip([i.params[0] for i in marg_prior],
                                     marg_prior))
             self._setup_prior()
-        super(MarginalizedGaussianNoise, self).__init__(variable_params, data,
-                                                        waveform_generator,
-                                                        f_lower, psds, f_upper,
-                                                        norm, **kwargs)
 
     @property
     def default_stats(self):
@@ -290,6 +292,13 @@ class MarginalizedGaussianNoise(GaussianNoise):
         """
         prior_section = "marginalized_prior"
         args = cls._init_args_from_config(cp)
+        # try to load sampling transforms
+        try:
+            sampling_transforms = SamplingTransforms.from_config(
+                cp, args['variable_params'])
+        except ValueError:
+            sampling_transforms = None
+        args['sampling_transforms'] = sampling_transforms 
         marg_prior = read_distributions_from_config(cp, prior_section)
         if len(marg_prior) == 0:
             raise AttributeError("No priors are specified for the "
@@ -304,6 +313,31 @@ class MarginalizedGaussianNoise(GaussianNoise):
         for i in params:
             kwargs[i+"_marginalization"] = True
         args.update(kwargs)
+        variable_params = args['variable_params']
+        data = args['data']
+        delta_f = args['delta_f']
+        delta_t = args['delta_t']
+        recalibration = None
+        gates = None
+        try:
+            static_params = args['static_params']
+        except KeyError:
+            static_params = {}
+        # set up waveform generator
+        try:
+            approximant = static_params['approximant']
+        except KeyError:
+            raise ValueError("no approximant provided in the static args")
+        generator_function = generator.select_waveform_generator(approximant)
+        waveform_generator = generator.FDomainDetFrameGenerator(
+            generator_function, epoch=data.values()[0].start_time,
+            variable_args=variable_params, detectors=data.keys(),
+            delta_f=delta_f, delta_t=delta_t,
+            recalib=recalibration, gates=gates,
+            **static_params)
+        args['waveform_generator'] = waveform_generator
+        args.pop('delta_t')
+        args.pop('delta_f')
         return cls(**args)
 
     def _setup_prior(self):
