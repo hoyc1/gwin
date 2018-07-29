@@ -298,7 +298,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
                 cp, args['variable_params'])
         except ValueError:
             sampling_transforms = None
-        args['sampling_transforms'] = sampling_transforms 
+        args['sampling_transforms'] = sampling_transforms
         marg_prior = read_distributions_from_config(cp, prior_section)
         if len(marg_prior) == 0:
             raise AttributeError("No priors are specified for the "
