@@ -20,6 +20,7 @@ import numpy
 from numpy import isclose
 
 from pycbc.workflow import WorkflowConfigParser
+from pycbc import distributions
 
 from gwin import models
 
@@ -128,10 +129,10 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
     def test_from_config(self, random_data, request):
         """Test the function which loads data from a configuration file. Here
         we assume we are just marginalizing over distance with a uniform prior
-        (50, 5000]
+        [50, 5000)
         """
-        params = {"approximant": "IMRPhenomPv2", "f_lower": 20, "f_ref": 20,
-                  "ra": 1.5, "dec": -0.5, "polarization": 0.5}
+        param = {"approximant": "IMRPhenomPv2", "f_lower": "20", "f_ref": "20",
+                  "ra": "1.5", "dec": "-0.5", "polarization": "0.5"}
 
         cp = WorkflowConfigParser()
         cp.add_section("model")
@@ -144,8 +145,8 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
         cp.add_section("variable_params")
         cp.set("variable_params", "tc", "")
         cp.add_section("static_params")
-        for key in params.keys():
-            cp.set("static_params", key, params[key])
+        for key in param.keys():
+            cp.set("static_params", key, param[key])
         cp.add_section("prior_tc")
         cp.set("prior_tc", "name", "uniform")
         cp.set("prior_tc", "min-tc", "1126259462.32")
