@@ -106,9 +106,9 @@ class TestSamplers(_TestBase):
             model = eval_class(
                 fd_waveform_generator.variable_args,
                 fd_waveform, fd_waveform_generator,
-                self.fmin, psds={ifo:zdhp_psd for ifo in self.ifos},
+                self.fmin, psds={ifo: zdhp_psd for ifo in self.ifos},
                 prior=prior_eval, time_marginalization=True,
-                marg_prior = [distributions.Uniform(time=(0, 10000))])  
+                marg_prior=[distributions.Uniform(time=(0, 10000))])
         else:
             model = eval_class(
                 fd_waveform_generator.variable_args,
