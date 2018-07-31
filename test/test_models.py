@@ -216,7 +216,7 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
             pass
         else:
             model = self.TEST_CLASS(
-                ['tc'], data, fd_waveform_generator, fmin=self.fmin
+                ['tc'], data, fd_waveform_generator, fmin=self.fmin,
                 psds={ifo: zdhp_psd for ifo in self.ifos},
                 distance_marginalization=dist_marg,
                 time_marginalization=time_marg,
