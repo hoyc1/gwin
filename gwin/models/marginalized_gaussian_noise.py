@@ -455,8 +455,6 @@ class MarginalizedGaussianNoise(GaussianNoise):
     def _margphase_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over phase.
         """
-        x = mf_snr * numpy.exp(self._phase_array*1j)
-        print(numpy.log(numpy.sum(self._deltap*self.phase_prior*numpy.exp(x))) - 0.5*opt_snr)
         return numpy.log(special.i0(mf_snr)) - 0.5*opt_snr
 
     def _loglr(self):
