@@ -195,7 +195,7 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
         assert marg_priors["distance"].bounds["distance"].min == 50.0
         assert marg_priors["distance"].bounds["distance"].max == 5000.0
 
-    def test_loglr(self, random_data, fd_waveform_generator):
+    def test_loglr(self, random_data, fd_waveform_generator, zdhp_psd):
         data = {ifo: random_data for ifo in self.ifos}
         index = numpy.ndindex(2, 2, 2)
         time_marg = False
