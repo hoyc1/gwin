@@ -99,7 +99,7 @@ class TestSamplers(_TestBase):
 
     @pytest.fixture
     def model(self, fd_waveform, fd_waveform_generator, prior_eval,
-              zdhp_psd, request, marg_prior_eval):
+              zdhp_psd, request):
         eval_class = models.models[request.param]
         if request.param == "marginalized_gaussian_noise":
             # Test that the sampler works for time_marginalization
