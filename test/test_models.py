@@ -61,7 +61,7 @@ class TestBaseModel(_TestBase):
         cls.data = range(10)
 
     @pytest.fixture(scope='function')
-    def simple(self, request):
+    def simple(self):
         model = self.TEST_CLASS([])
         return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT)
 
@@ -97,7 +97,7 @@ class TestGaussianNoise(TestBaseModel):
         return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT)
 
     @pytest.fixture(scope='function')
-    def full(self, fd_waveform, fd_waveform_generator, zdhp_psd, request):
+    def full(self, fd_waveform, fd_waveform_generator, zdhp_psd):
         model = self.TEST_CLASS(
             ['tc'], fd_waveform, fd_waveform_generator, self.fmin,
             psds={ifo: zdhp_psd for ifo in self.ifos})
@@ -167,8 +167,7 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
                       distributions.Uniform(time=(0, 10000))]
         model = self.TEST_CLASS(
                     ['tc'], data, fd_waveform_generator,
-                    fmin=self.fmin,
-                    psds={ifo: zdhp_psd for ifo in self.ifos},
+                    self.fmin, psds={ifo: zdhp_psd for ifo in self.ifos},
                     distance_marginalization=False,
                     time_marginalization=True,
                     phase_marginalization=True,
