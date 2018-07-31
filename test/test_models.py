@@ -26,6 +26,8 @@ from gwin import models
 from utils import _TestBase
 from utils.core import tempfile_with_content
 
+from test_option_utils import config
+
 
 class TestNoPrior(object):
     TEST_CLASS = models.base._NoPrior
@@ -61,8 +63,12 @@ class TestBaseModel(_TestBase):
         cls.data = range(10)
 
     @pytest.fixture(scope='function')
-    def simple(self):
-        model = self.TEST_CLASS([])
+    def simple(self, request):
+        if request.params == "marginalized_gaussian_noise":
+            model = self.TEST_CLASS([], time_marginalization=True,
+                marg_prior=[distributions.Uniform(time=(0, 10000))])
+        else:
+            model = self.TEST_CLASS([])
         return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT)
 
     def test_defaults(self, simple):
@@ -97,7 +103,7 @@ class TestGaussianNoise(TestBaseModel):
         return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT)
 
     @pytest.fixture(scope='function')
-    def full(self, fd_waveform, fd_waveform_generator, zdhp_psd):
+    def full(self, fd_waveform, fd_waveform_generator, zdhp_psd, request):
         model = self.TEST_CLASS(
             ['tc'], fd_waveform, fd_waveform_generator, self.fmin,
             psds={ifo: zdhp_psd for ifo in self.ifos})
@@ -137,7 +143,7 @@ polarization =
 ra =
 dec =
 
-[static_args]
+[static_params]
 approximant = IMRPhenomPv2
 f_lower = 18
 f_ref = 20
@@ -172,14 +178,6 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
     """Tests MarginalizedGaussianNoise."""
     TEST_CLASS = models.MarginalizedGaussianNoise
     DEFAULT_CALLSTAT = 'logplr'
-
-    def config(scope='function'):
-        with tempfile_with_content(TEST_CONFIGURATION) as cfo:
-            yield WorkflowConfigParser([cfo.name])
-
-        _base = os.path.basename(cfo.name)
-        if os.path.exists(_base):
-            os.unlink(os.path.basename(_base))
 
     def test_from_config(self, config, random_data, request):
         """Test the function which loads data from a configuration file. Here
