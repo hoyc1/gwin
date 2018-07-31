@@ -20,7 +20,6 @@ distance.
 
 import numpy
 from scipy import special
-from scipy import interpolate
 
 from pycbc import filter
 from pycbc.waveform import NoWaveformError
@@ -228,6 +227,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
     **kwargs :
         All other keyword arguments are passed to ``GaussianNoise``.
     """
+    name = 'marginalized_gaussian_noise'
 
     def __init__(self, variable_params, data, waveform_generator,
                  f_lower, psds=None, f_upper=None, norm=None,
@@ -279,13 +279,29 @@ class MarginalizedGaussianNoise(GaussianNoise):
                ['{}_matchedfilter_snrsq'.format(det) for det in self._data]
 
     @classmethod
-    def from_config(cls, cp, **kwargs):
+    def from_config(cls, cp, data, delta_f=None, delta_t=None,
+                    gates=None, recalibration=None, **kwargs):
         """Initializes an instance of this class from the given config file.
 
         Parameters
         ----------
         cp : WorkflowConfigParser
             Config file parser to read.
+        data : dict
+            A dictionary of data, in which the keys are the detector names and
+            the values are the data. This is not retrieved from the config
+            file, and so must be provided.
+        delta_f : float
+            The frequency spacing of the data; needed for waveform generation.
+        delta_t : float
+            The time spacing of the data; needed for time-domain waveform
+            generators.
+        recalibration : dict of pycbc.calibration.Recalibrate, optional
+            Dictionary of detectors -> recalibration class instances for
+            recalibrating data.
+        gates : dict of tuples, optional
+            Dictionary of detectors -> tuples of specifying gate times. The
+            sort of thing returned by `pycbc.gate.gates_from_cli`.
         \**kwargs :
             All additional keyword arguments are passed to the class. Any
             provided keyword will over ride what is in the config file.
@@ -314,11 +330,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
             kwargs[i+"_marginalization"] = True
         args.update(kwargs)
         variable_params = args['variable_params']
-        data = args['data']
-        delta_f = args['delta_f']
-        delta_t = args['delta_t']
-        recalibration = None
-        gates = None
+        args["data"] = data
         try:
             static_params = args['static_params']
         except KeyError:
@@ -336,8 +348,6 @@ class MarginalizedGaussianNoise(GaussianNoise):
             recalib=recalibration, gates=gates,
             **static_params)
         args['waveform_generator'] = waveform_generator
-        args.pop('delta_t')
-        args.pop('delta_f')
         return cls(**args)
 
     def _setup_prior(self):
