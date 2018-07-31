@@ -221,7 +221,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
     distance_marginalization : bool, optional
         A Boolean operator which determines if the likelihood is marginalized
         over distance
-    prior : list, optional
+    marg_prior : list, optional
         An instance of pycbc.distributions which returns a list of prior
         distributions to be used when marginalizing the likelihood
     **kwargs :
@@ -348,6 +348,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
             recalib=recalibration, gates=gates,
             **static_params)
         args['waveform_generator'] = waveform_generator
+        args["f_lower"] = static_params["f_lower"]
         return cls(**args)
 
     def _setup_prior(self):
@@ -444,6 +445,11 @@ class MarginalizedGaussianNoise(GaussianNoise):
     def _margphase_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over phase.
         """
+        print(numpy.log(special.i0(mf_snr)) - 0.5*opt_snr)
+        array = numpy.linspace(0, 2*numpy.pi, 10**4)
+        marg_mf = mf_snr*numpy.exp(array)
+        delta_phi = array[1] - array[0]
+        print(numpy.log(special.logsumexp(mf_snr, b=delta_phi)) - 0.5*opt_snr)
         return numpy.log(special.i0(mf_snr)) - 0.5*opt_snr
 
     def _loglr(self):
