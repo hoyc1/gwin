@@ -114,7 +114,7 @@ class TestSamplers(_TestBase):
                 fd_waveform_generator.variable_args,
                 fd_waveform, fd_waveform_generator,
                 self.fmin, psds={ifo: zdhp_psd for ifo in self.ifos},
-                prior=prior_eval, marg_prior=marg_prior_eval)
+                prior=prior_eval)
         return models.CallModel(model, "logposterior", return_all_stats=False)
 
     # -- actual tests ---------------------------
