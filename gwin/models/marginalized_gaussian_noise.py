@@ -368,9 +368,9 @@ class MarginalizedGaussianNoise(GaussianNoise):
             self._dist_array = numpy.linspace(bounds["distance"].min,
                                               bounds["distance"].max, 10**4)
             self._deltad = self._dist_array[1] - self._dist_array[0]
-            self._dist_prior = numpy.array(
-                                   [self._marg_prior["distance"].pdf(distance=i) for
-                                    i in self._dist_array])
+            self.dist_prior = numpy.array(
+                                  [self._marg_prior["distance"].pdf(distance=i)
+                                   for i in self._dist_array])
         if self._margtime:
             bounds = self._marg_prior["time"].bounds
             self._time_array = numpy.linspace(bounds["time"].min,
@@ -411,7 +411,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
         logl_marg = logl/self._dist_array
         opt_snr_marg = opt_snr/self._dist_array**2
         return special.logsumexp(logl_marg - 0.5*opt_snr_marg,
-                                 b=self._deltad*self._dist_prior)
+                                 b=self._deltad*self.dist_prior)
 
     def _margtimedist_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over time and
@@ -421,7 +421,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
         logl_marg = logl/self._dist_array
         opt_snr_marg = opt_snr/self._dist_array**2
         return special.logsumexp(logl_marg - 0.5*opt_snr_marg,
-                                 b=self._deltad*self._dist_prior)
+                                 b=self._deltad*self.dist_prior)
 
     def _margtimephase_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over time and phase.
@@ -437,7 +437,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
         logl_marg = logl/self._dist_array
         opt_snr_marg = opt_snr/self._dist_array**2
         return special.logsumexp(logl_marg - 0.5*opt_snr_marg,
-                                 b=self._deltad*self._dist_prior)
+                                 b=self._deltad*self.dist_prior)
 
     def _margdist_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over distance.
@@ -445,7 +445,7 @@ class MarginalizedGaussianNoise(GaussianNoise):
         mf_snr_marg = mf_snr/self._dist_array
         opt_snr_marg = opt_snr/self._dist_array**2
         return special.logsumexp(mf_snr_marg - 0.5*opt_snr_marg,
-                                 b=self._deltad*self._dist_prior)
+                                 b=self._deltad*self.dist_prior)
 
     def _margtime_loglr(self, mf_snr, opt_snr):
         """Returns the log likelihood ratio marginalized over time.

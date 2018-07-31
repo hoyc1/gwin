@@ -147,10 +147,10 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
         cp.add_section("static_params")
         for key in param.keys():
             cp.set("static_params", key, param[key])
-        cp.add_section("prior_tc")
-        cp.set("prior_tc", "name", "uniform")
-        cp.set("prior_tc", "min-tc", "1126259462.32")
-        cp.set("prior_tc", "max-tc", "1126259462.52")
+        cp.add_section("prior-tc")
+        cp.set("prior-tc", "name", "uniform")
+        cp.set("prior-tc", "min-tc", "1126259462.32")
+        cp.set("prior-tc", "max-tc", "1126259462.52")
 
         data = {ifo: random_data for ifo in self.ifos}
         model = models.MarginalizedGaussianNoise.from_config(cp, data)
@@ -163,7 +163,7 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
 
     def test_loglr(self, random_data, fd_waveform_generator, zdhp_psd):
         data = {ifo: random_data for ifo in self.ifos}
-        marg_prior = [distributions.Uniform(phase=(0, 2*np.pi)),
+        marg_prior = [distributions.Uniform(phase=(0, 2*numpy.pi)),
                       distributions.Uniform(time=(0, 10000))]
         model = self.TEST_CLASS(
                     ['tc'], data, fd_waveform_generator,
