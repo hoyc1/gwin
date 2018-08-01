@@ -93,7 +93,7 @@ class TestGaussianNoise(TestBaseModel):
     def simple(self, random_data, fd_waveform_generator, request):
         data = {ifo: random_data for ifo in self.ifos}
         model = self.TEST_CLASS([], data, fd_waveform_generator,
-                                    f_lower=self.fmin)
+                                f_lower=self.fmin)
         return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT)
 
     @pytest.fixture(scope='function')
