@@ -61,7 +61,7 @@ class TestBaseModel(_TestBase):
         cls.data = range(10)
 
     @pytest.fixture(scope='function')
-    def simple(self):
+    def simple(self, request):
         model = self.TEST_CLASS([])
         return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT)
 
@@ -90,14 +90,14 @@ class TestGaussianNoise(TestBaseModel):
     DEFAULT_CALLSTAT = 'logplr'
 
     @pytest.fixture(scope='function')
-    def simple(self, random_data, fd_waveform_generator):
+    def simple(self, random_data, fd_waveform_generator, request):
         data = {ifo: random_data for ifo in self.ifos}
         model = self.TEST_CLASS([], data, fd_waveform_generator,
-                                f_lower=self.fmin)
+                                    f_lower=self.fmin)
         return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT)
 
     @pytest.fixture(scope='function')
-    def full(self, fd_waveform, fd_waveform_generator, zdhp_psd):
+    def full(self, fd_waveform, fd_waveform_generator, zdhp_psd, request):
         model = self.TEST_CLASS(
             ['tc'], fd_waveform, fd_waveform_generator, self.fmin,
             psds={ifo: zdhp_psd for ifo in self.ifos})
@@ -126,13 +126,33 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
     TEST_CLASS = models.MarginalizedGaussianNoise
     DEFAULT_CALLSTAT = 'logplr'
 
+    @pytest.fixture(scope='function')
+    def simple(self, random_data, fd_waveform_generator):
+        marg_prior = [distributions.Uniform(distance=(50, 5000))]
+        data = {ifo: random_data for ifo in self.ifos}
+        model = self.TEST_CLASS([], data, fd_waveform_generator,
+                                f_lower=self.fmin,
+                                distance_marginalization=True,
+                                marg_prior=marg_prior)
+        return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT)
+
+    @pytest.fixture(scope='function')
+    def full(self, fd_waveform, fd_waveform_generator, zdhp_psd, request):
+        marg_prior = [distributions.Uniform(distance=(50, 5000))]
+        model = self.TEST_CLASS(
+            ['tc'], fd_waveform, fd_waveform_generator, self.fmin,
+            psds={ifo: zdhp_psd for ifo in self.ifos},
+            distance_marginalization=True, marg_prior=marg_prior)
+        return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT,
+                               return_all_stats=False)
+
     def test_from_config(self, random_data, request):
         """Test the function which loads data from a configuration file. Here
         we assume we are just marginalizing over distance with a uniform prior
         [50, 5000)
         """
         param = {"approximant": "IMRPhenomPv2", "f_lower": "20", "f_ref": "20",
-                  "ra": "1.5", "dec": "-0.5", "polarization": "0.5"}
+                 "ra": "1.5", "dec": "-0.5", "polarization": "0.5"}
 
         cp = WorkflowConfigParser()
         cp.add_section("model")
@@ -160,17 +180,3 @@ class TestMarginalizedGaussianNoise(TestGaussianNoise):
         assert model._margdist
         assert marg_priors["distance"].bounds["distance"].min == 50.0
         assert marg_priors["distance"].bounds["distance"].max == 5000.0
-
-    def test_loglr(self, random_data, fd_waveform_generator, zdhp_psd):
-        data = {ifo: random_data for ifo in self.ifos}
-        marg_prior = [distributions.Uniform(phase=(0, 2*numpy.pi)),
-                      distributions.Uniform(time=(0, 10000))]
-        model = self.TEST_CLASS(
-                    ['tc'], data, fd_waveform_generator,
-                    self.fmin, psds={ifo: zdhp_psd for ifo in self.ifos},
-                    distance_marginalization=False,
-                    time_marginalization=True,
-                    phase_marginalization=True,
-                    marg_prior=marg_prior)
-        return self.CALL_CLASS(model, self.DEFAULT_CALLSTAT,
-                               return_all_stats=False)
