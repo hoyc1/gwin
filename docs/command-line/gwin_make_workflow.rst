@@ -85,7 +85,7 @@ We can turn on likehood marginalization by specifying the ``marginalized_gaussia
 .. literalinclude:: ../../examples/workflow/GW150914_example/marginalized_gwin.ini           
       :language: ini
 
-If you want to also marginalize over time and/or phase, then you will need to add ``time_marginalization =`` and/or ``phase_marginalization=`` in the ``[model]`` section with a corresponding prior under the section ``[marginalized_prior-${VARIABLE}]``. If this was the case, then for this trivial example, you would no longer need to sample over the phase and coalescence time.
+If you want to also marginalize over time and/or phase, then add its name to the ``[model]`` section and add a corresponding prior under the section ``[marginalized_prior-${VARIABLE}]`` like shown above. If this was the case, then for this trivial example, you would no longer need to sample over the phase and coalescence time.
 
 When working on real data, it is necessary to marginalise over calibration uncertainty.
 The model and parameters describing the calibration uncertainty can be passed in another ini file, e.g.:
